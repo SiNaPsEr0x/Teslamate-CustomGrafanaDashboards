@@ -80,33 +80,66 @@ If you want to be sure that you are using the latest version of the Dashboards:
 git -C ~/Teslamate-CustomGrafanaDashboards pull
 ```
 
-- Then **restart** Grafana container (docker-compose restart grafana)
+- Then **restart** Grafana container
 
+```bash
+docker compose restart grafana  
+```
+
+Or (if you are using a previous docker version)
+
+```bash
+docker-compose restart grafana  
+```
+
+## How to use these Custom Dashboards
+
+In order to use these dashboards, once imported, you may want to go to the Grafana "Browse" option (from the left vertical bar), from there you will see a new folder with the imported dashboards.
+
+![Browse](./screenshots/help/browseoption.png) ![Custom Dashboards](./screenshots/help/customdasboardfolder.png)
+
+This Custom Dashboards have a special label so they don't get mixed up with the Teslamate defaults dashboards to distinguish easier and group together. When you are in a Custom Dashboard you will see in the upper right corner, a drop-down button from  you may access the rest dashboards as well.
+
+![DropDown](./screenshots/help/dropdownbutton.png)
 ___
 
 ## How to manually import these custom dashboards
 
-The following steps let you import the JSON files into your setup:
+The following steps let you import the JSON files into your setup if you don't want to auto-import them:
 
 - On Grafana (from Teslamate instance), Browse Dashboards then Import...
 - Upload JSON file or import via panel json by pasting the raw content of te JSON file.
 - On the next screen you may name the dashboard as you wish or accept the suggested one.
 - Try to keep UID as it is, because it could be linked inside the dashboard and to avoid duplicates UIDs.
-- Then select the appropiate Teslamate datasource from the available droplist.
 - Finally, press the "Import" button
 
+## Tips on Dashboards
+
+Have in mind that each dashboard may have an "Information" icon (as shown in the following image). If you point on it, you'll have aditional information on the current panel. Try to check it while you are browsing or analizing your data.
+
+![InfoIcon](./screenshots/help/infoicon.png)
 ___
 
 ## Screenshots
 
+### [Amortization Tracker](./dashboards/AmortizationTracker.json)
+
+This dashboard aims to show the depreciation value of the car over time and its journey.
+Depreciating a car by its mileage can be done using various methods. A common approach is to use a depreciation rate per mile or to create a depreciation curve based on data. On the other hand, the depreciation of a car due to age can vary depending on several factors such as the make, model, overall condition of the vehicle, and demand in the market. Here you can put your costs, rates and other variable values to have and idea of the depreciated car value and fuel savings.
+
+![Amortization Tracker](./screenshots/AmortizationTracker.png)
+
 ### [Battery Health](./dashboards/BatteryHealth.json)
 
-This dashboard is meant to have a look of the Battery health based on the data logged in Teslamate.
-So, the more data you have logged from your brand new car the better.
-
-**Possible degradation** is just an estimated value to have a reference, measured on **usable battery level** of every charging session with enough kWh added (in order to avoid dirty data from the sample), calculated daily according to the rated efficiency of the car. There are two charts showing the mean values based on the projected range - mileage with a **Monthly projected battery capacity** and a **Weekly projected range**.
+This dashboard has been already migrated (given) to the core dashboards of Teslamate and will continue developing directly there with the collaboration of all the enthusiasts in the community. You will find it there with the same name **Battery Health**.
 
 ![Battery Health](./screenshots/BatteryHealth.png)
+
+### [Browse Charges](./dashboards/BrowseCharges.json)
+
+This dashboard has been already migrated (given) to the core dashboards of Teslamate and will continue developing directly there with the collaboration of all the enthusiasts in the community. You will find it there with the name **Charges**.
+
+![Browse Charges](./screenshots/BrowseCharges.png)
 
 ### [Charging Costs Stats](./dashboards/ChargingCostsStats.json)
 
@@ -160,6 +193,37 @@ Additionally, you can see the states stats of the selected period.
 
 ![Current State](./screenshots/CurrentState.png)
 
+### [Database Information](./dashboards/CurrentState.json)
+
+Unlike the other dashboards, this is a specific one to view database information: size, number of records, indexes, and generic information on drives and charges.
+
+![Database Information](./screenshots/DatabaseInfo.png)
+
+### [DC Charging Curves By Carrier](./dashboards/DC_ChargingCurvesByCarrier.json)
+
+This dasboard is browse your DC charge sessions by charger carriers.
+
+It's important that you have Geo-Fences added related with the name of the carrier
+you have recharged your car, or you may want to edit periodically the **name** field of the **addresses** table, so that it contains its name.
+
+For example, if **Teslamate** geolocates the name as *"Esso Purley Way"* you may modify it to *"Esso Purley Way - IONITY"* or *"IONITY Esso Purley Way"*, then you can filter using the filter textbox **IONITY** to show all the charging curves of all charging sessions at that carrier.
+
+![DC Charging Curves By Carrier](./screenshots/DC_ChargingCurvesByCarrier.png)
+
+### [Incomplete Data](./dashboards/IncompleteData.json)
+
+With this dashboard you may find your incomplete drives or charges that have been interrupted by the connection or any other issue. So you may follow the official guide to fix it.
+
+![Incomplete Data](./screenshots/IncompleteData.png)
+
+### [Range Degradation](./dashboards/RangeDegradation.json)
+
+In this dashboard you may analize your mileage and the range degradation by a selected period.
+
+So you may have an idea of how much of range is lost as well as if there were any failure in Teslamate logging your data.  
+
+![Range Degradation](./screenshots/RangeDegradation.png)
+
 ### [Mileage Stats](./dashboards/MileageStats.json)
 
 With this dashboard you may analize your mileage and number of drives by year, month, week or day.
@@ -167,6 +231,19 @@ With this dashboard you may analize your mileage and number of drives by year, m
 The dashboard shows a table with the selected period, time driven, distance, number of drives and efficiency then a bar chart to have a better look for comparison.  
 
 ![Mileage Stats](./screenshots/MileageStats.png)
+
+### [Speed Rates](./dashboards/SpeedRates.json)
+
+In this dashboard you can browse the speed rates by segments, based on terrain type: Flat, Uphill or Downhill. This way you can see the average consumtion by speed and its average distance.
+Likewise, you can see the Top speeds you reached and how long it lasted.
+
+![Speed Rates](./screenshots/SpeedRates.png)
+
+### [Speed & Temperature](./dashboards/SpeedTemperature.json)
+
+In this dashboard you can browse and analyse the car consumption by temperature in short and long stretches. This way you can see the average consumption depending on the temperature to better understand the efficiency of the car in cold or hot climates.
+
+![Speed Temperature](./screenshots/SpeedTemperature.png)
 
 ### [Tracking Drives](./dashboards/TrackingDrives.json)
 
@@ -186,15 +263,27 @@ Tip: On Grafana you can press "h" to get a keyboard shortcuts if you want to cha
 The following dashboards, queries and design are the result of many tests and hours of work.
 Feel free to take them for your own personal use.
 
-If you are able to contibute or improve this project just fork the repository and make a pull request. I'll really apreciate any enhancement or suggestion.
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
+
+If you are able to contibute or improve this project, please fork the repository and create a pull request. I'll really apreciate any enhancement or suggestion. Don't forget to give the project a star! Thanks again!
+
+### Steps to create a pull request
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/NewFeature`)
+3. Commit your Changes (`git commit -m 'Add some NewFeature'`)
+4. Push to the Branch (`git push origin feature/NewFeature`)
+5. Open a Pull Request
 
 Do not take the dashboards much less upload or merge them to other repositories as if the original idea were yours, nor do you share it on social media without mentioning the author. Please, **respect the ingenuity and work of others**. Enjoy!
 
 ## Donations
 
-If you like my work and want to support me, buying me a coffee would be greatly appreciated! Your support helps me to keep creating and improving these dashboards. Thank you!
-
-[![Paypal Donate](https://img.shields.io/badge/Donate-PayPal-ff69b4.svg)](https://www.paypal.com/donate/?business=MAWY99TACEXSU&no_recurring=0&currency_code=EUR)
+|     |     |
+| --- | --- |
+| If you like my work and want to support me, buying me a coffee would be greatly appreciated! Your support helps me to keep creating and improving these dashboards. Thank you! | [![Paypal Donate](https://img.shields.io/badge/Donate-PayPal-ff69b4.svg)](https://www.paypal.com/donate/?business=MAWY99TACEXSU&no_recurring=0&currency_code=EUR) |
+| Other way to support me is to use [my referral link](https://ts.la/juancarlos32618) to purchase a Tesla product and get Credits you can redeem for exclusive awards like Supercharging miles, merchandise, and accessories. | [![Tesla referral link](./screenshots/help/tesla.png)](https://ts.la/juancarlos32618) |
+|     |     |
 
 ## Credits
 
@@ -203,7 +292,7 @@ If you like my work and want to support me, buying me a coffee would be greatly 
 
 ## License
 
-Licensed under the [MIT license](./LICENSE).
+Licensed under the [MIT license][license-url].
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
