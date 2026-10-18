@@ -1,0 +1,18 @@
+elixir/_build/
+elixir/deps/
+.git/
+.gitignore
+Dockerfile
+Makefile
+README*
+elixir/test/
+elixir/priv/static/assets
+**/node_modules
+import/
+teslamate.bck
+
+# SINAPSE_SECRETS
+.env
+.env.*
+.unified-output/
+custom/screenshots/

@@ -1,0 +1,23 @@
+[default.extend-words]
+mosquitto = "mosquitto"
+HASS = "HASS"
+Juni = "Juni"
+bck = "bck"
+Automations = "Automations"
+automations = "automations"
+ws = "ws"
+WS = "WS"
+ro = "ro"
+hd = "hd"
+dur = "dur"
+pn = "pn"
+Derivated = "Derivated"
+Bre = "Bre"
+BRIN = "BRIN"
+
+[type.po]
+extend-glob = ["*.po"]
+check-file = false
+
+[files]
+extend-exclude = ["*.json.example", "grafana/i18n/*.json"]

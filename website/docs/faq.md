@@ -1,0 +1,115 @@
+---
+title: Frequently Asked Questions
+sidebar_label: FAQ
+---
+
+## How to generate your own tokens
+
+See [Generating Tokens](installation/tokens.md).
+
+## My car does not show up in TeslaMate
+
+Click **Reload vehicles** on the car overview or the Settings page. TeslaMate reads the vehicle list from your Tesla account only when it starts, so a car added to the account later, the first one after sign-in or a second one after delivery, is not logged until you reload. The reload reads the list once and starts logging the new car; cars already logged are not interrupted.
+
+If the reload finds no new car, the car is not in your Tesla account yet: wait until it shows up in the Tesla app. If the overview says that data collection is disabled, enable the car under **Settings**. If TeslaMate reports a rate limit, wait a few minutes before reloading. If you are signed out, sign in first; the vehicle list is read on sign-in.
+
+## TeslaMate stopped recording data. How can I fix it?
+
+Check the TeslaMate logs first. They usually show whether TeslaMate cannot reach Tesla, cannot connect to the database, or needs new credentials.
+
+If the logs show an authentication error, use the [token generation tools](installation/tokens.md) to generate a new access token and refresh token, then enter both on the TeslaMate sign-in page. Signing in again does not remove data that TeslaMate has already recorded.
+
+Tesla's API does not provide historical drives or charges, so TeslaMate cannot recover data that was missed while logging was stopped. If another supported logger recorded the missing period, you may be able to add it with the [TeslaFi import](import/teslafi.md).
+
+## Why are no consumption values displayed in Grafana?
+
+Unfortunately the Tesla API does not return consumption values for a trip. In order to still be able to display values TeslaMate estimates the consumption on the basis of the recorded (charging) data.
+It takes **at least two** charging sessions before the first estimate can be displayed. Charging sessions have to be longer than 10 minutes and less than 95% state-of-charge (SoC). Each future charging session will slightly improve the accuracy of the estimate, which is applied retroactively to all data.
+
+## Why "null" is displayed above the panels in Grafana?
+
+If you have not customized the name of your Tesla, TeslaMate saves an empty value in the PostgreSQL database. When Grafana is reading from the database, the value `null` is the value for the variable car_id in Grafana.
+
+Give your Tesla a name via car touchscreen and wait for TeslaMate to synchronize it.
+
+## What is the geo-fence feature for?
+
+At the moment geo-fences are a way to create custom locations like `🏡 Home` or `🛠️ Work` That may be particularly useful if the addresses (which are provided by [OpenStreetMap](https://www.openstreetmap.org)) in your region are inaccurate or if you street-park at locations where the exact address may vary.
+
+## Why are my Docker timestamp logs different than my machine?
+
+Docker container timezones default to UTC. To set the timezone for your container, use the `TZ` Environment Variable in your YML file. More information found at [Environment Variables](https://docs.teslamate.org/docs/configuration/environment_variables)
+
+## How can I reorder my cars?
+
+Open the Settings page and scroll to **General Settings** > **Car Order**. Use **Move up** or **Move down** next to a car to change the display order.
+
+## Help, my car does not fall asleep
+
+The accessory power functionality prevents your car from going to sleep even if no accessory is connected. You can disable it by setting Controls > Charging > Keep Accessory Power Off.
+
+Cars with Media Control Unit version 1 (MCU1) require certain settings to be able to fall asleep. Model S and Model X cars built before 3/2018 have the MCU1 unit, this can also be checked from the Software -> Additional vehicle information. If the 'Infotainment processor' is 'NVIDIA Tegra', the car is equipped with MCU1.
+
+The settings needed to enable the sleep mode with MCU1 are:
+
+- 'Display' -> 'Energy saving' -> ON
+- 'Display' -> 'Always connected' -> unchecked
+- 'Safety & security' -> 'Cabin overheat protection' -> OFF
+
+With these settings the MCU1 cars should fall asleep within some 15 minutes of inactivity. This is what you should see in the log when streaming mode is enabled in TeslaMate
+
+- `[info] Suspending logging` after 3 minutes of inactivity (doors locked)
+- `[info] Fetching vehicle state ...` about 21 minutes later. The car should have fallen asleep during this period
+
+In this example the driver's door was opened and closed:
+
+```bash
+teslamate_1     | 2021-03-16 11:41:19.336 car_id=1 [info] Start / :online
+teslamate_1     | 2021-03-16 11:41:19.603 car_id=1 [info] Connecting ...
+teslamate_1     | 2021-03-16 11:44:41.380 car_id=1 [info] Suspending logging
+teslamate_1     | 2021-03-16 12:03:27.356 car_id=1 [info] Fetching vehicle state ...
+teslamate_1     | 2021-03-16 12:03:28.123 car_id=1 [info] Start / :asleep
+teslamate_1     | 2021-03-16 12:03:28.139 car_id=1 [info] Disconnecting ...
+```
+
+![image](https://user-images.githubusercontent.com/2128464/111361149-38238380-8696-11eb-950d-aba298206d2d.png)
+
+**Note!** If you are using some other data logger like TeslaFi at the same time, the sleep attempts probably fail as the other data logger is keeping the car awake. Especially calling the [Vehicle Data API](https://www.teslaapi.io/vehicles/state-and-settings#vehicle-data) will reset the car's inactivity timer.
+
+## Why am I missing data when not using the Streaming API?
+
+The problem with the polling mode is that the car does not fall asleep before it have been inactive for some 15 minutes. TeslaMate will suspend all polling after the car has been idle for 3 minutes (the 'Idle Time Before Trying to Sleep' setting), and will resume polling 15 minutes later (the 'Time to Try Sleeping' setting).
+Any activity during this 15 minutes can't be detected, as calling the [Vehicle Data API](https://www.teslaapi.io/vehicles/state-and-settings#vehicle-data) would reset the car's inactivity timer, preventing the car from falling asleep.
+
+Calling the [Vehicle API](https://www.teslaapi.io/vehicles/list#vehicle) does not reset the inactivity timer, but it only tells if the car is either online (driving, charging, idle, about to fall asleep) or asleep. It can't tell if an idle car started driving during the 'Time to Try Sleeping' period.
+
+## Which network flows must be authorized?
+
+⚠️ This is for advanced users!
+
+You might want to prohibit all network flows except those necessary for teslamate.
+This is a common practice to harden an installation (e.g., to reduce the risk of data leakage).
+
+The following flows must be authorized (egress traffic and DNS resolution):
+
+HTTPS (TCP/443)  
+auth.tesla.com  
+owner-api.teslamotors.com  
+streaming.vn.teslamotors.com  
+nominatim.openstreetmap.org
+
+HTTP (TCP/80)  
+step.esa.int
+
+Note: This may change when TeslaMate is updated!
+
+## Does TeslaMate have a public API? Can I read the database directly?
+
+There is no public API, and the database is not an interface.
+
+**The only supported integration surface is [MQTT](integrations/mqtt.md).** This is what the [Home Assistant integration](integrations/home_assistant.md) uses. Everything else is internal.
+
+**The PostgreSQL database is TeslaMate-internal storage, not an interface.** It has never been a documented interface and will not become one. If you read the tables directly — custom Grafana panels, scripts, third-party or commercial tools built on today's schema — expect your integration to break. Not might: will.
+There is no compatibility promise and no deprecation window. We will not coordinate schema changes with external tools, and issues asking for that will be closed. Your data is safe — migrations carry it forward — but every assumption about how it is stored is up for renegotiation, and nobody outside this repository is part of that negotiation.
+
+**The same applies to the web interface.** Its routes exist for the browser and for the dashboards we ship. None of them is a public API, none is documented, and any of them may change or disappear in any release without notice.

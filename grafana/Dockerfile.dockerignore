@@ -1,0 +1,21 @@
+# The build context is the repository root, so that NOTICE and LICENSE are
+# reachable; only these paths are sent to the builder.
+*
+!grafana
+!NOTICE
+!LICENSE
+
+# SINAPSE_CUSTOM_CONTEXT
+!custom
+custom/*
+!custom/dashboards
+!custom/dashboards/**
+!custom/i18n
+custom/i18n/*
+!custom/i18n/it.json
+!custom/scripts
+custom/scripts/*
+!custom/scripts/generate_localized_dashboards.py
+!custom/LICENSE
+!config
+!config/**

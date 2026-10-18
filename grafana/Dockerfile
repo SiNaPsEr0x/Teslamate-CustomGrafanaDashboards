@@ -1,0 +1,82 @@
+# SINAPSE_CUSTOM_BUILD
+FROM python:3.13-alpine AS sinapse-custom
+WORKDIR /src
+COPY custom/dashboards /src/dashboards
+COPY custom/i18n/it.json /src/it.json
+COPY custom/scripts/generate_localized_dashboards.py /src/generate.py
+RUN python /src/generate.py --source /src/dashboards --pack /src/it.json --output /out
+
+# NOTICE and LICENSE, made read-only here: --chmod on the final COPY would also
+# apply to the directory it creates and lock out the runtime user.
+FROM scratch AS legal
+COPY --chmod=444 NOTICE LICENSE /legal/
+
+# Generate locale-specific copies of the TeslaMate dashboards. The original
+# English JSON files stay unchanged and remain the fallback dashboards.
+FROM python:3.13-alpine AS localized-dashboards
+WORKDIR /src
+COPY grafana/dashboards /src/dashboards
+COPY grafana/i18n /src/i18n
+RUN python /src/i18n/generate.py \
+    --source /src/dashboards \
+    --translations /src/i18n \
+    --output /out
+
+# Ensure selecting a tag that is available for arm64 and amd64
+# https://hub.docker.com/r/grafana/grafana/tags
+FROM grafana/grafana:13.2.2
+
+ENV GF_ANALYTICS_REPORTING_ENABLED=false \
+    GF_ANALYTICS_CHECK_FOR_UPDATES=false \
+    GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+    GF_ANALYTICS_FEEDBACK_LINKS_ENABLED=false \
+    GF_AUTH_ANONYMOUS_ENABLED=false \
+    GF_AUTH_BASIC_ENABLED=false \
+    GF_SECURITY_ADMIN_PASSWORD=admin \
+    GF_SECURITY_ADMIN_USER=admin \
+    GF_SECURITY_ALLOW_EMBEDDING=true \
+    GF_SECURITY_DISABLE_GRAVATAR=true \
+    GF_DATABASE_HIGH_AVAILABILITY=false \
+    GF_USERS_ALLOW_SIGN_UP=false \
+    GF_USERS_DEFAULT_LANGUAGE=detect \
+    GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/dashboards_internal/home.json \
+    GF_DATE_FORMATS_USE_BROWSER_LOCALE=true \
+    GF_PLUGINS_PREINSTALL_DISABLED=true \
+    GF_UNIFIED_ALERTING_ENABLED=false \
+    GF_METRICS_ENABLED=false \
+    GF_RECORDING_RULES_ENABLED=false \
+    GF_CLOUD_MIGRATION_ENABLED=false \
+    GF_FEATURE_TOGGLES_provisioning=false \
+    GF_FEATURE_TOGGLES_splashScreen=false \
+    GF_FEATURE_TOGGLES_dashboardNewLayouts=false \
+    DATABASE_PORT=5432 \
+    DATABASE_SSL_MODE=disable
+
+COPY --from=legal /legal/ /usr/share/doc/teslamate/
+
+USER grafana
+
+COPY grafana/logo.svg /usr/share/grafana/public/build/img/grafana_icon.svg
+
+RUN LOGO_PATH=$(find /usr/share/grafana/public/build/static/img/ -type f -name 'grafana_icon.*.svg') && \
+    cp /usr/share/grafana/public/build/img/grafana_icon.svg "$LOGO_PATH" || true
+
+COPY grafana/favicon.png /usr/share/grafana/public/build/img/fav32.png
+COPY grafana/apple-touch-icon.png /usr/share/grafana/public/build/img/apple-touch-icon.png
+
+COPY grafana/datasource.yml /etc/grafana/provisioning/datasources/
+COPY grafana/dashboards.yml /etc/grafana/provisioning/dashboards/
+COPY grafana/dashboards/internal/*.json /dashboards_internal/
+COPY grafana/dashboards/reports/*.json /dashboards_reports/
+COPY grafana/dashboards/*.json /dashboards/
+COPY --from=localized-dashboards /out/internal/*.json /dashboards_internal/
+COPY --from=localized-dashboards /out/reports/*.json /dashboards_reports/
+COPY --from=localized-dashboards /out/*.json /dashboards/
+
+EXPOSE 3000
+
+# SINAPSE_CUSTOM_INSTALL
+COPY --from=sinapse-custom /out/ /custom_dashboards/
+COPY config/grafana/custom.yml /etc/grafana/provisioning/dashboards/sinapse-custom.yml
+COPY config/grafana/datasource.yml /etc/grafana/provisioning/datasources/datasource.yml
+COPY custom/LICENSE /usr/share/doc/teslamate-custom/LICENSE

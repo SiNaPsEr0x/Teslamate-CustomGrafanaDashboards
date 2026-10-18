@@ -1,0 +1,43 @@
+name: Sync Italian localization upstreams
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * *"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: italian-localization-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'SiNaPsEr0x/Teslamate-CustomGrafanaDashboards'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out localization branch
+        uses: actions/checkout@v6
+        with:
+          ref: i18n/italian-localization-upstream
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Test transactional sync and localization
+        run: python3 -m unittest discover -s tests -v
+      - name: Merge releases, generate, test runtime and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sync_italian_localization.py --runtime --push --output "${{ runner.temp }}/italian-localization"
+      - name: Upload dashboards, compatibility report and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: italian-localization-${{ github.run_id }}
+          path: ${{ runner.temp }}/italian-localization/
+          if-no-files-found: warn
+          retention-days: 30

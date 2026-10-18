@@ -1,0 +1,19 @@
+# Explicit UID required by the custom dashboards, including Italian copies.
+# Mount IN PLACE OF the official datasource.yml, not as a second duplicate.
+apiVersion: 1
+datasources:
+  - name: TeslaMate
+    uid: TeslaMate
+    type: postgres
+    url: $DATABASE_HOST:$DATABASE_PORT
+    user: $DATABASE_USER
+    access: proxy
+    isDefault: true
+    secureJsonData:
+      password: $DATABASE_PASS
+    jsonData:
+      postgresVersion: 1500
+      sslmode: $DATABASE_SSL_MODE
+      database: $DATABASE_NAME
+    version: 1
+    editable: true

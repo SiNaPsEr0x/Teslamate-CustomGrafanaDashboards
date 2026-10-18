@@ -1,0 +1,48 @@
+name: Validate dashboards
+
+on:
+  push:
+    branches: [main, develop, i18n/italian-localization-upstream]
+    paths:
+      - "dashboards/**"
+      - "scripts/validate_dashboards.py"
+      - "scripts/generate_localized_dashboards.py"
+      - "scripts/validate_localization.py"
+      - "i18n/**"
+      - "tests/**"
+      - "scripts/sync_italian_localization.py"
+      - "scripts/check_teslamate_runtime.py"
+      - ".github/workflows/validate-dashboards.yml"
+  pull_request:
+    branches: [main, develop, i18n/italian-localization-upstream]
+    paths:
+      - "dashboards/**"
+      - "scripts/validate_dashboards.py"
+      - "scripts/generate_localized_dashboards.py"
+      - "scripts/validate_localization.py"
+      - "i18n/**"
+      - "tests/**"
+      - "scripts/sync_italian_localization.py"
+      - "scripts/check_teslamate_runtime.py"
+      - ".github/workflows/validate-dashboards.yml"
+  workflow_dispatch:
+
+jobs:
+  static:
+    name: JSON and query conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Validate dashboards
+        run: python3 scripts/validate_dashboards.py --no-sql
+
+      - name: Validate localization
+        run: python3 scripts/validate_localization.py
+
+      - name: Test localization sync
+        run: python3 -m unittest discover -s tests -v

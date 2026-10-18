@@ -1,0 +1,175 @@
+name: Bug Report
+description: File a bug report
+labels: []
+assignees: []
+body:
+  - type: checkboxes
+    attributes:
+      label: Is there an existing issue for this?
+      description: |
+        Thank you for helping us make TeslaMate better, by reporting a bug you have found. This issue may already be reported.
+        Please search to see if an issue already exists for the bug you encountered:
+
+        - [Issues](https://github.com/teslamate-org/teslamate/issues?q=)
+        - [Discussions](https://github.com/teslamate-org/teslamate/discussions)
+
+      options:
+        - label: I have checked the existing issues and discussions, and I can confirm that there are no duplicates.
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Please provide as much info as possible.
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: What happened?
+      description: A concise description of what you're experiencing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: A concise description of what you expected to happen.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: can_repro
+    attributes:
+      label: Can the issue reliably be reproduced?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps To Reproduce the issue
+      description: Explain how the maintainers can reproduce the issue.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: |
+        Please copy and paste any relevant log output of the TeslaMate Docker container or application. This will be automatically formatted into code, so no need for backticks.
+
+        To retrieve the TeslaMate Docker container logs, run `docker compose logs teslamate`.
+      placeholder: |
+        2021-09-22 23:20:54.226 [info] Starting logger for 'Tesla'
+        2021-09-22 23:20:54.251 [info] MQTT connection has been established
+        2021-09-22 23:20:54.334 car_id=1 [info] Start / :asleep
+        2021-09-22 23:20:56.721 [info] GET /
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem.
+      placeholder: Upload screenshot files here by dragging & dropping
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: Additional data
+      description: |
+        If applicable, add an export of the data for the given period.
+
+        For example, to export charge data after January 1, 2020:
+
+        ```bash
+        $ docker compose exec database psql teslamate teslamate -c \
+           "COPY (select * from charges where date > '2020-01-01') TO STDOUT WITH CSV HEADER" > charges.csv
+
+        $ docker compose exec database psql teslamate teslamate -c \
+           "COPY (select * from charging_processes where start_date > '2020-01-01') TO STDOUT WITH CSV HEADER" > charging_processes.csv
+        ```
+
+        To export drive data after January 1, 2020:
+
+        ```bash
+        $ docker compose exec database psql teslamate teslamate -c \
+           "COPY (select id, car_id, drive_id, date, elevation, speed, power, odometer, ideal_battery_range_km, est_battery_range_km, rated_battery_range_km, battery_level, usable_battery_level, battery_heater_no_power, battery_heater_on, battery_heater, inside_temp, outside_temp, fan_status, driver_temp_setting, passenger_temp_setting, is_climate_on, is_rear_defroster_on, is_front_defroster_on from positions where date > '2020-01-20') TO STDOUT WITH CSV HEADER" > positions.csv
+
+        $ docker compose exec database psql teslamate teslamate -c \
+           "COPY (select * from drives where start_date > '2020-01-01') TO STDOUT WITH CSV HEADER" > drives.csv
+        ```
+      placeholder: Upload exported data here by dragging & dropping
+    validations:
+      required: false
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Type of installation
+      options:
+        - Docker (https://docs.teslamate.org/docs/installation/docker/)
+        - NixOS (https://docs.teslamate.org/docs/installation/nixos)
+        - Manual (no support)
+        - Unraid (no support, if not using docker compose)
+        - Other (no support)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of TeslaMate are you running?
+      placeholder: v1.33.0
+    validations:
+      required: true
+
+  - type: input
+    id: postgresql_version
+    attributes:
+      label: PostgreSQL version
+      description: What version of PostgreSQL are you running? (see Database information dashboard -> PostgreSQL Version (upper right on desktop) or database -> image section in your `docker-compose.yml`)
+      placeholder: v17.3
+
+  - type: checkboxes
+    attributes:
+      label: Are you running latest major supported PostgreSQL version?
+      description: |
+        Please ensure you are running the latest major supported PostgreSQL version by comparing your installation with the [installation docs](https://docs.teslamate.org/docs/installation/docker/).
+
+        If not, please first do a backup and follow [Upgrading PostgreSQL to a new major version](https://docs.teslamate.org/docs/maintenance/upgrading_postgres)
+
+      options:
+        - label: I run the latest major supported PostgreSQL version
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reverse_proxy
+    attributes:
+      label: Are you using a reverse Proxy for TeslaMate?
+      options:
+        - "No"
+        - "Yes (specify in next field)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reverse_proxy_details
+    attributes:
+      label: Details about your reverse Proxy if applicable
+      description: If you use a reverse Proxy, please provide details about your setup
+    validations:
+      required: false

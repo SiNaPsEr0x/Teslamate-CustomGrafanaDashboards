@@ -1,0 +1,51 @@
+version: 2
+updates:
+  - package-ecosystem: "mix"
+    directory: "/elixir"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "npm"
+    directory: "/elixir/assets"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+    ignore:
+      # ignore the path based dependencies to prevent "Dependabot couldn't fetch all your path-based dependencies"
+      - dependency-name: phoenix
+      - dependency-name: phoenix_html
+      - dependency-name: phoenix_live_view
+
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "cargo"
+    directory: "/rust"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "docker"
+    directory: "/grafana"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    groups:
+      actions-deps:
+        patterns:
+          - "*"
+    schedule:
+      interval: "monthly"
