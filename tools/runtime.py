@@ -33,6 +33,8 @@ def main(output):
         LETSENCRYPT_EMAIL='ci@example.invalid',
         BASIC_AUTH_USER='admin',
         BASIC_AUTH_PASSWORD='ci-test-password',
+        HTTP_PORT='18080',
+        HTTPS_PORT='18443',
         MQTT_PORT='1883',
     )
 
@@ -82,6 +84,10 @@ def main(output):
         assert auth['image'].startswith('httpd:2.4')
         assert not teslamate.get('ports'), 'TeslaMate must only be exposed through Traefik'
         assert not grafana_service.get('ports'), 'Grafana must only be exposed through Traefik'
+        proxy_ports = {(p['target'], str(p['published']), p['protocol']) for p in proxy['ports']}
+        assert (80, environment['HTTP_PORT'], 'tcp') in proxy_ports
+        assert (443, environment['HTTPS_PORT'], 'tcp') in proxy_ports
+        assert (443, environment['HTTPS_PORT'], 'udp') in proxy_ports
         assert teslamate['environment']['CHECK_ORIGIN'] == 'true'
         assert teslamate['environment']['VIRTUAL_HOST'] == environment['FQDN_TM']
         assert grafana_service['environment']['GF_SERVER_ROOT_URL'] == 'https://%(domain)s/grafana'
@@ -89,8 +95,8 @@ def main(output):
         assert teslamate['labels']['traefik.http.middlewares.teslamate-auth.basicauth.usersfile'] == '/auth/.htpasswd'
         assert grafana_service['labels']['traefik.http.routers.grafana.tls.certresolver'] == 'tmhttpchallenge'
         report['compose'] = (
-            'validated all-in-one Traefik HTTPS, generated Basic Auth, integrated builds '
-            'and PostgreSQL 18 volume layout'
+            'validated all-in-one Traefik HTTPS, configurable host ports, generated Basic Auth, '
+            'integrated builds and PostgreSQL 18 volume layout'
         )
 
         command('docker', 'compose', '-f', 'compose.yml', 'build', label='build', timeout=2700)
