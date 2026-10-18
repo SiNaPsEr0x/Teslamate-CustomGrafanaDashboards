@@ -2,6 +2,8 @@
 
 **TeslaMate e Grafana in italiano, pronti per Docker o Portainer.** Questa distribuzione unisce [TeslaMate ufficiale](https://github.com/teslamate-org/teslamate) e [Custom Grafana Dashboards](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards), con dashboard italiane, Traefik e HTTPS.
 
+**Immagini Docker pronte:** `ghcr.io/sinapser0x/teslamate:latest` e `ghcr.io/sinapser0x/teslamate-grafana:latest`. Dopo la prima pubblicazione su GHCR, Docker Compose le scarica senza compilare. Per gli aggiornamenti usa `docker compose pull` prima di `docker compose up -d`.
+
 **In breve:** un solo repository, branch `main`, un solo `compose.yml`. Gli aggiornamenti dei sorgenti e le patch italiane sono gestiti automaticamente su GitHub. **Il tuo server non si aggiorna da solo:** per installare una nuova versione devi aggiornare lo stack.
 
 ## Prima di iniziare
@@ -40,7 +42,7 @@ Ti servono:
 
    Per generare i quattro valori casuali su Linux/macOS, esegui `openssl rand -hex 32` quattro volte. **Non usare la password del tuo account Tesla.**
 
-4. Premi **Deploy the stack**. La prima compilazione può richiedere alcuni minuti.
+4. Premi **Deploy the stack**. Le immagini già compilate vengono scaricate automaticamente; il primo download può richiedere alcuni minuti.
 
 ### Dopo l'avvio
 
@@ -67,7 +69,8 @@ cp .env.example .env
 Apri `.env`, sostituisci i valori `replace-with-...`, il dominio e l'email; conserva il file in un luogo sicuro. Poi avvia:
 
 ```bash
-docker compose -f compose.yml up -d --build --wait
+docker compose -f compose.yml pull
+docker compose -f compose.yml up -d --wait
 ```
 
 ## Aggiornamenti e backup
@@ -80,7 +83,7 @@ docker compose -f compose.yml up -d --build --wait
 
 ```bash
 git pull --ff-only origin main
-docker compose -f compose.yml up -d --build --wait
+docker compose -f compose.yml up -d --wait
 ```
 
 **Prima di aggiornare o migrare**, salva il database PostgreSQL (preferibilmente con un dump), i dati Grafana e tutte le variabili/credenziali dello stack. In particolare, **non perdere mai `ENCRYPTION_KEY`**: serve a leggere i dati sensibili già cifrati.
