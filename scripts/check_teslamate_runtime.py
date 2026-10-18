@@ -23,6 +23,22 @@ def command(*args, check=True, timeout=600):
     return result
 
 
+def check_compose(config):
+    database = config["services"]["database"]
+    image = database["image"]
+    version = re.search(r"(?:^|/)postgres:(\d+)", image)
+    if not version:
+        raise RuntimeError(f"PostgreSQL image must have an explicit major version: {image}")
+    major = int(version.group(1))
+    expected = "/var/lib/postgresql" if major >= 18 else "/var/lib/postgresql/data"
+    targets = {volume["target"] for volume in database.get("volumes", [])}
+    if expected not in targets:
+        raise RuntimeError(f"PostgreSQL {major} requires a persistent volume at {expected}; got {sorted(targets)}")
+    if major >= 18 and "/var/lib/postgresql/data" in targets:
+        raise RuntimeError("Legacy PostgreSQL data mount is incompatible with the 18+ image layout")
+    return image
+
+
 def main(args):
     root = Path(args.root).resolve()
     generated = Path(args.generated).resolve()
@@ -35,11 +51,15 @@ def main(args):
     database, grafana, migrate = (name + suffix for suffix in ("-db", "-grafana", "-migrate"))
     runtime = {"release": args.release, "sql": "not run", "grafana": "not run"}
     try:
+        compose = json.loads(command("docker", "compose", "-f", str(root / "scripts/docker-compose.yml"),
+                                     "config", "--format", "json").stdout)
+        postgres_image = check_compose(compose)
+        runtime["compose"] = "Docker Compose config and PostgreSQL persistent volume layout validated"
         command("docker", "network", "create", name)
         command("docker", "run", "-d", "--name", database, "--network", name,
                 "--network-alias", "database", "-e", "POSTGRES_USER=teslamate",
                 "-e", "POSTGRES_PASSWORD=i18n-test-only", "-e", "POSTGRES_DB=teslamate",
-                "postgres:18-trixie")
+                postgres_image)
         for _ in range(60):
             if command("docker", "exec", database, "pg_isready", "-U", "teslamate", check=False).returncode == 0:
                 break

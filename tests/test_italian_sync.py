@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import sync_italian_localization as sync
 import generate_localized_dashboards as generator
+import check_teslamate_runtime as runtime
 
 
 def git(root, *args):
@@ -152,6 +153,14 @@ class LocalizationTests(unittest.TestCase):
         panel = result["panels"][0]
         self.assertEqual(panel["targets"][0]["rawSql"], sql)
         self.assertFalse(any(o["matcher"]["options"] == "time" for o in panel["fieldConfig"]["overrides"]))
+
+    def test_postgres_18_compose_mount_requires_versioned_parent(self):
+        def config(image, target):
+            return {"services": {"database": {"image": image, "volumes": [{"target": target}]}}}
+        self.assertEqual(runtime.check_compose(config("postgres:18-trixie", "/var/lib/postgresql")), "postgres:18-trixie")
+        self.assertEqual(runtime.check_compose(config("postgres:17", "/var/lib/postgresql/data")), "postgres:17")
+        with self.assertRaises(RuntimeError):
+            runtime.check_compose(config("postgres:18-trixie", "/var/lib/postgresql/data"))
 
     def test_tag_rewrite_is_rejected(self):
         with patch.object(sync, "run"), patch.object(sync, "git", return_value="new-sha"):

@@ -505,3 +505,11 @@ It uses the official `DATABASE_*` environment variables. The runtime smoke test
 uses this same supplied configuration. Existing installations should check their
 UID before changing datasource provisioning, since other dashboards may reference
 an existing generated UID. The automation does not alter an installed Grafana.
+
+
+The sample `scripts/docker-compose.yml` now mounts PostgreSQL 18 data at
+`/var/lib/postgresql`, matching the official image's version-specific layout.
+The runtime check validates the Compose model and this mount before creating
+its disposable database. This sample change is not an upgrade procedure:
+an existing PostgreSQL volume must be backed up and migrated for its current
+layout before changing image major versions or mount paths in production.

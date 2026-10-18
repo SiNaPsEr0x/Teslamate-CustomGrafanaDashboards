@@ -29,7 +29,7 @@ services:
       - POSTGRES_PASSWORD= #insert your secure database password!
       - POSTGRES_DB=teslamate
     volumes:
-      - teslamate-db:/var/lib/postgresql/data
+      - teslamate-db:/var/lib/postgresql
 
   grafana:
     image: teslamate/grafana:latest
