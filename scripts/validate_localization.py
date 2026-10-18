@@ -154,12 +154,11 @@ def main() -> int:
                 print(f"Template variable technical values changed in {path.name}")
                 return 1
 
-            alias_map = generator.collect_alias_map(source, strings)
             source_sql: list[str] = []
             generated_sql: list[str] = []
             collect_raw_sql(source, source_sql)
             collect_raw_sql(generated, generated_sql)
-            expected_sql = [generator.rewrite_sql_aliases(sql, alias_map) for sql in source_sql]
+            expected_sql = source_sql  # SQL, including CTE aliases and reserved fields, must never change.
             if generated_sql != expected_sql:
                 print(f"Unexpected SQL change in {path.name}")
                 return 1

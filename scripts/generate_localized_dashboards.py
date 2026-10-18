@@ -3,8 +3,8 @@
 
 The source dashboards remain untouched. Only user-visible strings are translated;
 query values, variables, datasource identifiers and other technical fields remain
-unchanged. SQL aliases are translated together with Grafana field references that
-point to those aliases.
+unchanged. SQL aliases and references remain byte-for-byte identical; Grafana
+display-name overrides translate returned field labels without changing SQL.
 """
 
 from __future__ import annotations
@@ -53,19 +53,10 @@ def collect_alias_map(value, strings: dict[str, str]) -> dict[str, str]:
 
 
 def rewrite_sql_aliases(value: str, alias_map: dict[str, str]) -> str:
-    def replace(match: re.Match[str]) -> str:
-        source = match.group(3)
-        target = alias_map.get(source, source)
-        return f"{match.group(1)}{match.group(2)}{target}{match.group(4)}"
-    return SQL_ALIAS_RE.sub(replace, value)
-
-
-def rewrite_alias_ref(value, alias_map: dict[str, str]):
-    if isinstance(value, str):
-        return alias_map.get(value, value)
-    if isinstance(value, list):
-        return [rewrite_alias_ref(item, alias_map) for item in value]
+    # Aliases can be CTE/subquery columns or Grafana's reserved "time" field.
+    # Rewriting only AS declarations breaks references and time-series detection.
     return value
+
 
 
 def rewrite(value, strings: dict[str, str], passthrough: set[str], alias_map: dict[str, str]):
@@ -86,7 +77,7 @@ def rewrite(value, strings: dict[str, str], passthrough: set[str], alias_map: di
 
         elif key == "renameByName" and isinstance(item, dict):
             localized[key] = {
-                alias_map.get(source, source): (
+                source: (
                     translate_exact(target, strings, passthrough)
                     if isinstance(target, str)
                     else rewrite(target, strings, passthrough, alias_map)
@@ -96,19 +87,19 @@ def rewrite(value, strings: dict[str, str], passthrough: set[str], alias_map: di
 
         elif key == "aliasColors" and isinstance(item, dict):
             localized[key] = {
-                alias_map.get(source, source): rewrite(target, strings, passthrough, alias_map)
+                source: rewrite(target, strings, passthrough, alias_map)
                 for source, target in item.items()
             }
 
         elif key == "matcher" and isinstance(item, dict):
             matcher = copy.deepcopy(item)
             if matcher.get("id") in {"byName", "byNames"} and "options" in matcher:
-                matcher["options"] = rewrite_alias_ref(matcher["options"], alias_map)
+                matcher["options"] = copy.deepcopy(matcher["options"])
             localized[key] = rewrite(matcher, strings, passthrough, alias_map)
 
         elif key == "names" and isinstance(item, list):
             # Grafana transformations commonly keep a list of field/series names.
-            localized[key] = [alias_map.get(name, name) if isinstance(name, str) else name for name in item]
+            localized[key] = copy.deepcopy(item)
 
         elif key == "value" and value.get("id") == "displayName" and isinstance(item, str):
             localized[key] = translate_exact(item, strings, passthrough)
@@ -119,11 +110,37 @@ def rewrite(value, strings: dict[str, str], passthrough: set[str], alias_map: di
     return localized
 
 
+def translate_field_labels(dashboard: dict, strings: dict[str, str]):
+    """Translate SQL output labels through Grafana, preserving technical names."""
+    def panels(items):
+        for panel in items or []:
+            yield panel
+            yield from panels(panel.get("panels"))
+
+    for panel in panels(dashboard.get("panels")):
+        aliases = collect_alias_map(panel.get("targets", []), strings)
+        # Do not add field options to panels that have no translated SQL outputs.
+        if not aliases:
+            continue
+        overrides = panel.setdefault("fieldConfig", {}).setdefault("overrides", [])
+        for source, target in aliases.items():
+            if source in {"time", "time_sec", "metric", "__text", "__value"}:
+                continue
+            # Preserve explicit field display names and transformation renames.
+            existing = next((o for o in overrides if o.get("matcher") ==
+                             {"id": "byName", "options": source}), None)
+            if existing is None:
+                existing = {"matcher": {"id": "byName", "options": source}, "properties": []}
+                overrides.append(existing)
+            if not any(p.get("id") == "displayName" for p in existing.get("properties", [])):
+                existing.setdefault("properties", []).append({"id": "displayName", "value": target})
+
+
 def localize_dashboard(source: dict, stem: str, pack: dict) -> dict:
     strings = pack.get("strings", {})
     passthrough = set(pack.get("passthrough", []))
-    alias_map = collect_alias_map(source, strings)
-    localized = rewrite(copy.deepcopy(source), strings, passthrough, alias_map)
+    localized = rewrite(copy.deepcopy(source), strings, passthrough, {})
+    translate_field_labels(localized, strings)
     title = (pack.get("dashboard_titles") or {}).get(stem)
     if title:
         localized["title"] = title

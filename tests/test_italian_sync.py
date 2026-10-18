@@ -141,14 +141,100 @@ class LocalizationTests(unittest.TestCase):
         result = generator.localize_dashboard(source, "speed", {"strings": {"Speed": "Velocità"}})
         self.assertEqual(result["uid"], "keep")
         self.assertEqual(result["templating"], source["templating"])
-        self.assertEqual(result["panels"][0]["fieldConfig"]["overrides"][0]["matcher"]["options"], "Velocità")
-        self.assertIn('AS "Velocità"', result["panels"][0]["targets"][0]["rawSql"])
+        self.assertEqual(result["panels"][0]["fieldConfig"]["overrides"][0]["matcher"]["options"], "Speed")
+        self.assertEqual(source["panels"][0]["targets"][0]["rawSql"], result["panels"][0]["targets"][0]["rawSql"])
+        self.assertIn({"id": "displayName", "value": "Velocità"}, result["panels"][0]["fieldConfig"]["overrides"][0]["properties"])
+
+    def test_cte_aliases_and_time_column_remain_technical(self):
+        sql = 'WITH summary AS (SELECT 1 AS "power") SELECT summary.power AS "Power", now() AS "time" FROM summary'
+        source = {"panels": [{"targets": [{"rawSql": sql}]}]}
+        result = generator.localize_dashboard(source, "test", {"strings": {"power": "Potenza", "Power": "Potenza", "time": "tempo"}})
+        panel = result["panels"][0]
+        self.assertEqual(panel["targets"][0]["rawSql"], sql)
+        self.assertFalse(any(o["matcher"]["options"] == "time" for o in panel["fieldConfig"]["overrides"]))
 
     def test_tag_rewrite_is_rejected(self):
         with patch.object(sync, "run"), patch.object(sync, "git", return_value="new-sha"):
             with self.assertRaisesRegex(RuntimeError, "tag moved"):
                 sync.previous_sha(Path("."), {"teslamate_release": "v1", "teslamate_commit": "old-sha"},
                                   "owner/repo", "teslamate", "teslamate")
+
+class TransactionTests(GitSyncTests):
+    """Exercise the complete orchestration with a local upstream and bare origin.
+
+    Only GitHub release lookup, issue API and the separately exercised Docker
+    smoke-test boundary are mocked. Git, generation and validators are real.
+    """
+    def prepare(self):
+        for directory in ("scripts", "dashboards", "i18n"):
+            shutil.copytree(ROOT / directory, self.root / directory, ignore=shutil.ignore_patterns("__pycache__"))
+        (self.root / ".github").mkdir()
+        (self.root / sync.STATE).write_text(json.dumps({"custom_dashboards_release": "v-old", "teslamate_release": "v-tm"}))
+        start = self.commit("install localization controller")
+        remote = self.remote()
+        return start, remote
+
+    def exercise(self, runtime_fails=False):
+        args = argparse.Namespace(root=str(self.root), output=str(Path(self.tmp.name) / "output"),
+                                  branch="italian", runtime=True, push=True)
+        actual_run = sync.run
+        def commands(*argv, **kwargs):
+            if len(argv) > 1 and str(argv[1]).endswith("check_teslamate_runtime.py"):
+                if runtime_fails:
+                    raise RuntimeError("simulated SQL/Grafana incompatibility")
+                return subprocess.CompletedProcess(argv, 0, "runtime tested separately", "")
+            return actual_run(*argv, **kwargs)
+        with patch.object(sync, "release", side_effect=[
+                {"tag": "v-new", "sha": self.latest, "release_id": 2, "url": "https://example.invalid/custom"},
+                {"tag": "v-tm", "sha": self.base, "release_id": 1, "url": "https://example.invalid/tm"}]), \
+             patch.object(sync, "previous_sha", return_value=self.base), \
+             patch.object(sync, "run", side_effect=commands), \
+             patch.object(sync, "issue", return_value="https://example.invalid/issue") as opened, \
+             patch.dict(sync.os.environ, {"GITHUB_REPOSITORY": "owner/repo"}):
+            result = sync.synchronize(args)
+        report = json.loads((Path(args.output) / "report.json").read_text())
+        return result, report, opened
+
+    def test_complete_release_transaction_publishes_after_validation(self):
+        start, remote = self.prepare()
+        result, report, opened = self.exercise()
+        self.assertEqual(result, 0, report)
+        head = git(remote, "rev-parse", "refs/heads/italian")
+        self.assertNotEqual(head, start)
+        self.assertTrue(sync.ancestor(self.root, start, head))
+        self.assertTrue(sync.ancestor(self.root, self.latest, head))
+        state = json.loads(git(self.root, "show", f"{head}:{sync.STATE}"))
+        self.assertEqual(state["custom_dashboards_commit"], self.latest)
+        self.assertEqual(report["generated_dashboards"], 15)
+        self.assertEqual(git(self.root, "rev-parse", "HEAD"), start)
+        opened.assert_not_called()
+
+    def test_new_untranslated_dashboard_blocks_publish_and_opens_issue(self):
+        start, remote = self.prepare()
+        git(self.root, "checkout", "main")
+        (self.root / "dashboards").mkdir()
+        data = json.loads(next((ROOT / "dashboards").glob("*.json")).read_text())
+        data.update(uid="untranslated-new-dashboard", title="New upstream dashboard")
+        (self.root / "dashboards/NewDashboard.json").write_text(json.dumps(data))
+        self.latest = self.commit("new upstream dashboard without Italian title")
+        git(self.root, "checkout", "italian")
+        result, report, opened = self.exercise()
+        self.assertEqual(result, 1)
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("Missing dashboard titles", report["error"])
+        self.assertEqual(git(remote, "rev-parse", "refs/heads/italian"), start)
+        self.assertEqual(git(self.root, "rev-parse", "HEAD"), start)
+        opened.assert_called_once()
+
+
+    def test_runtime_failure_blocks_state_update_and_opens_issue(self):
+        start, remote = self.prepare()
+        result, report, opened = self.exercise(runtime_fails=True)
+        self.assertEqual(result, 1)
+        self.assertEqual(report["failed_stage"], "runtime SQL and Grafana compatibility")
+        self.assertEqual(git(remote, "rev-parse", "refs/heads/italian"), start)
+        self.assertEqual(git(self.root, "rev-parse", "HEAD"), start)
+        opened.assert_called_once()
 
 
 if __name__ == "__main__":
