@@ -1,0 +1,248 @@
+name: Sync Italian localization upstreams
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * *"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: italian-localization-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      CUSTOMS_REPO: jheredianet/Teslamate-CustomGrafanaDashboards
+      TESLAMATE_REPO: teslamate-org/teslamate
+      LOCALIZATION_BRANCH: i18n/italian-localization-upstream
+
+    steps:
+      - name: Check out localization branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.LOCALIZATION_BRANCH }}
+          fetch-depth: 0
+
+      - name: Configure remotes
+        run: |
+          set -euo pipefail
+          git remote add customs "https://github.com/${CUSTOMS_REPO}.git" 2>/dev/null || true
+          git remote add teslamate "https://github.com/${TESLAMATE_REPO}.git" 2>/dev/null || true
+
+          git fetch --prune customs             +refs/heads/main:refs/remotes/customs/main             '+refs/tags/*:refs/customs-tags/*'
+
+          git fetch --prune teslamate             +refs/heads/main:refs/remotes/teslamate/main             '+refs/tags/*:refs/teslamate-tags/*'
+
+      - name: Resolve latest releases
+        id: releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          customs_tag="$(gh api "repos/${CUSTOMS_REPO}/releases/latest" --jq '.tag_name')"
+          teslamate_tag="$(gh api "repos/${TESLAMATE_REPO}/releases/latest" --jq '.tag_name')"
+
+          test -n "$customs_tag"
+          test -n "$teslamate_tag"
+
+          git rev-parse -q --verify "refs/customs-tags/${customs_tag}^{commit}" >/dev/null
+          git rev-parse -q --verify "refs/teslamate-tags/${teslamate_tag}^{commit}" >/dev/null
+
+          {
+            echo "customs_tag=$customs_tag"
+            echo "teslamate_tag=$teslamate_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read previous upstream state
+        id: previous
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          path = Path(".github/i18n-upstream-state.json")
+          data = json.loads(path.read_text()) if path.exists() else {}
+
+          print("customs_tag=" + data.get("custom_dashboards_release", ""))
+          print("teslamate_tag=" + data.get("teslamate_release", ""))
+          PY
+
+      - name: Detect upstream changes
+        id: changes
+        env:
+          CUSTOMS_NEW: ${{ steps.releases.outputs.customs_tag }}
+          CUSTOMS_OLD: ${{ steps.previous.outputs.customs_tag }}
+          TESLAMATE_NEW: ${{ steps.releases.outputs.teslamate_tag }}
+          TESLAMATE_OLD: ${{ steps.previous.outputs.teslamate_tag }}
+        run: |
+          set -euo pipefail
+
+          [ "$CUSTOMS_NEW" != "$CUSTOMS_OLD" ] && customs_changed=true || customs_changed=false
+          [ "$TESLAMATE_NEW" != "$TESLAMATE_OLD" ] && teslamate_changed=true || teslamate_changed=false
+
+          {
+            echo "customs_changed=$customs_changed"
+            echo "teslamate_changed=$teslamate_changed"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rebase Italian localization onto latest Customs release
+        if: steps.changes.outputs.customs_changed == 'true'
+        id: rebase
+        env:
+          CUSTOMS_TAG: ${{ steps.releases.outputs.customs_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          current_base="$(git merge-base HEAD refs/remotes/customs/main)"
+          release_commit="$(git rev-parse "refs/customs-tags/${CUSTOMS_TAG}^{commit}")"
+
+          echo "Current Customs base: $current_base"
+          echo "Latest Customs release: ${CUSTOMS_TAG} ($release_commit)"
+
+          if [ "$current_base" = "$release_commit" ]; then
+            echo "rebased=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Do not move backwards if the localization branch is already based on
+          # Customs main newer than the latest published release.
+          if git merge-base --is-ancestor "$release_commit" "$current_base"; then
+            echo "Localization base is already newer than the latest Customs release."
+            echo "rebased=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git merge-base --is-ancestor "$current_base" "$release_commit"; then
+            title="Italian localization: Customs history diverged at ${CUSTOMS_TAG}"
+            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+            if [ -z "$existing" ]; then
+              gh issue create --repo "$GITHUB_REPOSITORY"                 --title "$title"                 --body "The latest TeslaMate Custom Grafana Dashboards release \`${CUSTOMS_TAG}\` is not a descendant of the current localization base. Automatic rebase was not attempted."
+            fi
+            exit 1
+          fi
+
+          if ! git rebase --onto "$release_commit" "$current_base" "$LOCALIZATION_BRANCH"; then
+            git rebase --abort || true
+            title="Italian localization sync conflict: ${CUSTOMS_TAG}"
+            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+            if [ -z "$existing" ]; then
+              gh issue create --repo "$GITHUB_REPOSITORY"                 --title "$title"                 --body "Automatic rebase of the Italian localization onto TeslaMate Custom Grafana Dashboards release \`${CUSTOMS_TAG}\` failed because of merge conflicts. The localization branch was left unchanged."
+            fi
+            exit 1
+          fi
+
+          echo "rebased=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check TeslaMate compatibility-sensitive changes
+        if: steps.changes.outputs.teslamate_changed == 'true' && steps.previous.outputs.teslamate_tag != ''
+        id: compatibility
+        env:
+          TESLAMATE_NEW: ${{ steps.releases.outputs.teslamate_tag }}
+          TESLAMATE_OLD: ${{ steps.previous.outputs.teslamate_tag }}
+        run: |
+          set -euo pipefail
+
+          old_ref="refs/teslamate-tags/${TESLAMATE_OLD}"
+          new_ref="refs/teslamate-tags/${TESLAMATE_NEW}"
+
+          if ! git rev-parse -q --verify "${old_ref}^{commit}" >/dev/null; then
+            echo "sensitive=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "$old_ref" "$new_ref")"
+
+          if printf '%s\n' "$changed" | grep -Eq             '^(elixir/priv/repo/migrations/|grafana/dashboards/|grafana/Dockerfile|docker-compose\.yml|compose\.yml)'; then
+            echo "sensitive=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sensitive=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate dashboards and Italian localization
+        if: steps.changes.outputs.customs_changed == 'true' || steps.changes.outputs.teslamate_changed == 'true'
+        run: |
+          set -euo pipefail
+          python3 -m json.tool i18n/it.json >/dev/null
+          python3 scripts/validate_dashboards.py --no-sql
+          python3 scripts/validate_localization.py
+
+          rm -rf /tmp/teslamate-custom-it
+          python3 scripts/generate_localized_dashboards.py             --source dashboards             --pack i18n/it.json             --output /tmp/teslamate-custom-it
+
+          test "$(find /tmp/teslamate-custom-it -maxdepth 1 -type f -name '*.json' | wc -l)" -gt 0
+
+      - name: Open compatibility review issue when TeslaMate changed sensitive areas
+        if: steps.changes.outputs.teslamate_changed == 'true' && steps.compatibility.outputs.sensitive == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESLAMATE_NEW: ${{ steps.releases.outputs.teslamate_tag }}
+          TESLAMATE_OLD: ${{ steps.previous.outputs.teslamate_tag }}
+        run: |
+          set -euo pipefail
+          title="Review custom dashboards for TeslaMate ${TESLAMATE_NEW}"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+
+          if [ -z "$existing" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY"               --title "$title"               --body "TeslaMate changed from \`${TESLAMATE_OLD}\` to \`${TESLAMATE_NEW}\` and the release diff touches database migrations, bundled Grafana dashboards, Grafana image configuration, or Compose files. Static localization validation passed, but the custom dashboards should be reviewed for runtime compatibility."
+          fi
+
+      - name: Update tracked upstream releases
+        if: steps.changes.outputs.customs_changed == 'true' || steps.changes.outputs.teslamate_changed == 'true'
+        env:
+          CUSTOMS_TAG: ${{ steps.releases.outputs.customs_tag }}
+          TESLAMATE_TAG: ${{ steps.releases.outputs.teslamate_tag }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = {
+              "custom_dashboards_release": os.environ["CUSTOMS_TAG"],
+              "teslamate_release": os.environ["TESLAMATE_TAG"],
+          }
+
+          Path(".github/i18n-upstream-state.json").write_text(
+              json.dumps(data, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/i18n-upstream-state.json
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(i18n): track upstream releases"
+          fi
+
+      - name: Push synchronized localization branch
+        if: steps.changes.outputs.customs_changed == 'true' || steps.changes.outputs.teslamate_changed == 'true'
+        run: |
+          set -euo pipefail
+          git fetch origin "$LOCALIZATION_BRANCH"
+          expected="$(git rev-parse "origin/${LOCALIZATION_BRANCH}")"
+          git push --force-with-lease="refs/heads/${LOCALIZATION_BRANCH}:$expected"             origin "HEAD:refs/heads/${LOCALIZATION_BRANCH}"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Italian localization upstream check"
+            echo "- Custom dashboards: \`${{ steps.releases.outputs.customs_tag }}\`"
+            echo "- TeslaMate: \`${{ steps.releases.outputs.teslamate_tag }}\`"
+            echo "- Customs changed: \`${{ steps.changes.outputs.customs_changed }}\`"
+            echo "- TeslaMate changed: \`${{ steps.changes.outputs.teslamate_changed }}\`"
+            echo "- TeslaMate compatibility-sensitive changes: \`${{ steps.compatibility.outputs.sensitive || 'n/a' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
