@@ -50,7 +50,7 @@ def main(args):
                "-e", "DATABASE_HOST=database", "-e", "DATABASE_NAME=teslamate"]
         image = f"teslamate/teslamate:{tag}"
         command("docker", "run", "--name", migrate, "--network", name, *env,
-                "-e", "ENCRYPTION_KEY=i18n-test-only", "--entrypoint", "/opt/app/bin/teslamate",
+                "-e", "ENCRYPTION_KEY=i18n-test-only", "-e", "MQTT_HOST=localhost", "--entrypoint", "/opt/app/bin/teslamate",
                 image, "eval", "TeslaMate.Release.migrate()", timeout=600)
         runtime["teslamate_image"] = command("docker", "image", "inspect", image,
                                                "--format", "{{json .RepoDigests}}").stdout.strip()
