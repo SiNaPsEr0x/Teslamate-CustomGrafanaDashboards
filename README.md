@@ -12,7 +12,7 @@ Distribuzione integrata di **TeslaMate**, dashboard Grafana ufficiali e **TeslaM
 | Dashboard ufficiali | `grafana/dashboards/` | Copie italiane con UID `-it`, titoli e campi visualizzati tradotti, SQL e variabili tecniche conservati |
 | Custom Dashboards | [jheredianet/Teslamate-CustomGrafanaDashboards](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards), importato in `custom/` | 15 dashboard italiane iniziali, dizionario e validatore dedicati, nessuna riscrittura degli alias SQL, collegamento di ritorno a TeslaMate garantito nelle copie generate |
 | Grafana | Dockerfile della release TeslaMate con integrazioni locali | Dashboard ufficiali inglesi/italiane e cartella **Custom TeslaMate · Italiano**, datasource con UID esplicito `TeslaMate`, login obbligatorio, pubblicazione su `/grafana` |
-| Traefik | `traefik:v3.6` nello stesso `compose.yml` | HTTPS su 443, redirect HTTP→HTTPS, HTTP/3, Let's Encrypt via HTTP challenge, routing TeslaMate/Grafana |
+| Traefik | `traefik:v3.6` nello stesso `compose.yml` | HTTPS, redirect HTTP→HTTPS, HTTP/3, Let's Encrypt via HTTP challenge, routing TeslaMate/Grafana e porte host configurabili |
 | Docker Compose | `compose.yml` nella radice | TeslaMate + Grafana + PostgreSQL 18 + Mosquitto + Traefik + generazione Basic Auth nello stesso stack |
 | Aggiornamenti | Unico workflow `SiNaPsE · TeslaMate Italiano + Custom Dashboards` | Controllo di entrambi gli upstream, merge, validazione, test e pubblicazione transazionale su `main` |
 
@@ -29,11 +29,12 @@ Prima di avviare lo stack servono:
 - Docker Engine e Docker Compose v2, oppure Portainer su Docker Standalone;
 - un **FQDN pubblico**, ad esempio `teslamate.example.com`;
 - record DNS A/AAAA del FQDN verso il server;
-- porte **80/TCP e 443/TCP** raggiungibili da Internet; **443/UDP** è usata da HTTP/3;
+- per il funzionamento standard di Let's Encrypt HTTP challenge, la porta pubblica **80/TCP** deve raggiungere Traefik;
+- per l'accesso HTTPS standard, la porta pubblica **443/TCP** deve raggiungere Traefik; **443/UDP** è usata da HTTP/3;
 - un indirizzo email valido per Let's Encrypt;
-- se il server è dietro un router/NAT, inoltro delle porte 80 e 443 verso l'host Docker.
+- se il server è dietro un router/NAT, inoltro delle porte pubbliche verso le porte host scelte con `HTTP_PORT` e `HTTPS_PORT`.
 
-Il certificato Let's Encrypt viene salvato nel volume Docker `traefik-acme`. TeslaMate e Grafana **non pubblicano più direttamente le porte 4000 e 3000 sull'host**: sono raggiungibili esclusivamente tramite Traefik. Mosquitto resta esposto solo su `127.0.0.1:1883` per eventuali integrazioni locali.
+Il certificato Let's Encrypt viene salvato nel volume Docker `traefik-acme`. TeslaMate e Grafana **non pubblicano direttamente le porte 4000 e 3000 sull'host**: sono raggiungibili esclusivamente tramite Traefik. Le porte pubblicate da Traefik sull'host sono configurabili; i valori predefiniti restano `80` e `443`. Mosquitto resta esposto solo su `127.0.0.1` sulla porta scelta con `MQTT_PORT`.
 
 ## Installazione con Portainer
 
@@ -60,6 +61,8 @@ Il progetto usa **un solo FQDN**, impostato con `FQDN_TM`: TeslaMate risponde su
 | `TM_TZ` | `Europe/Rome` | no | consigliato | timezone dello stack |
 | `FQDN_TM` | `teslamate.example.com` | **sì** | sì | hostname pubblico usato da TeslaMate, Grafana e Traefik |
 | `LETSENCRYPT_EMAIL` | `you@example.com` | **sì** | sì | account ACME/Let's Encrypt |
+| `HTTP_PORT` | `80` | no | no | porta TCP pubblicata sull'host e inoltrata alla porta interna 80 di Traefik |
+| `HTTPS_PORT` | `443` | no | no | porta TCP+UDP pubblicata sull'host e inoltrata alla porta interna 443 di Traefik |
 | `BASIC_AUTH_USER` | `teslamate` | no | sì | utente Basic Auth davanti a TeslaMate |
 | `BASIC_AUTH_PASSWORD` | password casuale forte | **sì** | **sì** | password Basic Auth; genera automaticamente `.htpasswd` bcrypt |
 | `GRAFANA_ADMIN_USER` | `admin` | no | sì | amministratore Grafana |
@@ -76,6 +79,47 @@ openssl rand -hex 24   # GRAFANA_ADMIN_PASSWORD
 ```
 
 **Non usare la password dell'account Tesla come nessuna di queste variabili.**
+
+### Usare porte host diverse da 80/443
+
+Per impostazione predefinita:
+
+```text
+HTTP_PORT=80
+HTTPS_PORT=443
+MQTT_PORT=1883
+```
+
+Se sul NAS/server le porte 80 e 443 sono già occupate, puoi ad esempio impostare in Portainer:
+
+```text
+HTTP_PORT=8080
+HTTPS_PORT=8443
+MQTT_PORT=1884
+```
+
+Il Compose pubblicherà quindi:
+
+```text
+host 8080/TCP  -> Traefik 80/TCP
+host 8443/TCP  -> Traefik 443/TCP
+host 8443/UDP  -> Traefik 443/UDP
+127.0.0.1:1884 -> Mosquitto 1883/TCP
+```
+
+`HTTP_PORT` e `HTTPS_PORT` sono **porte dell'host Docker**, non cambiano le porte interne dei container. Questa scelta evita di modificare i router Traefik, i servizi TeslaMate/Grafana e le immagini upstream.
+
+Con il resolver Let's Encrypt HTTP challenge predefinito la porta **80 pubblica di Internet deve comunque arrivare a Traefik**. Se usi `HTTP_PORT=8080`, configura quindi il router/firewall come `WAN 80/TCP → host Docker 8080/TCP`. Analogamente, per mantenere i normali URL `https://FQDN/` e `https://FQDN/grafana`, usa `WAN 443/TCP+UDP → host Docker 8443/TCP+UDP` quando `HTTPS_PORT=8443`.
+
+Esempio completo:
+
+```text
+Internet 80/TCP   -> NAS 8080/TCP -> Traefik 80
+Internet 443/TCP  -> NAS 8443/TCP -> Traefik 443
+Internet 443/UDP  -> NAS 8443/UDP -> Traefik 443 (HTTP/3)
+```
+
+Se vuoi invece esporre **direttamente su Internet una porta HTTPS non standard** come `https://FQDN:8443`, questa non è la topologia predefinita della guida TeslaMate/Let's Encrypt: oltre al forwarding della porta 80 necessario all'HTTP challenge, vanno considerati anche URL pubblici e redirect applicativi. La configurazione consigliata di questo progetto è quindi cambiare le porte **sull'host** e mantenere 80/443 come porte pubbliche esterne tramite NAT/port forwarding.
 
 ### Cosa bisogna salvare prima di aggiornare, migrare o ricreare Portainer
 
@@ -97,26 +141,26 @@ Il dato più importante è `ENCRYPTION_KEY`: **se perdi o cambi quella chiave ma
 Quando aggiorni dal repository Git:
 
 1. fai prima il backup di database, variabili Portainer e dati Grafana;
-2. mantieni **identici** tutti i valori esistenti delle variabili, salvo modifiche intenzionali a FQDN/password;
+2. mantieni **identici** tutti i valori esistenti delle variabili, salvo modifiche intenzionali a FQDN/password/porte host;
 3. aggiorna/redeploya lo stack dal branch `main`;
 4. non eliminare i volumi persistenti durante il redeploy;
 5. controlla i log di `proxy`, `teslamate`, `database` e `grafana` dopo l'avvio.
 
-Portainer lascia i riferimenti `${FQDN_TM}`, `${DATABASE_PASS}`, ecc. nel Compose e applica i valori configurati nello stack al momento del deploy. Questo permette di aggiornare `compose.yml` dal repository senza hardcodare hostname o segreti nel Git.
+Portainer lascia i riferimenti `${FQDN_TM}`, `${HTTP_PORT}`, `${HTTPS_PORT}`, `${DATABASE_PASS}`, ecc. nel Compose e applica i valori configurati nello stack al momento del deploy. Questo permette di aggiornare `compose.yml` dal repository senza hardcodare hostname, porte o segreti nel Git.
 
 ## Installazione in un unico comando
 
 Alternativa per chi non usa Portainer. Sostituisci soltanto `teslamate.example.com` e `you@example.com`, poi incolla l'intero comando:
 
 ```bash
-FQDN_TM='teslamate.example.com' LETSENCRYPT_EMAIL='you@example.com' bash -c 'set -euo pipefail; git clone --depth 1 --branch main https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git; cd Teslamate-CustomGrafanaDashboards; ENCRYPTION_KEY="$(openssl rand -hex 32)"; DATABASE_PASS="$(openssl rand -hex 24)"; GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"; BASIC_AUTH_PASSWORD="$(openssl rand -hex 18)"; printf "ENCRYPTION_KEY=%s\nDATABASE_USER=teslamate\nDATABASE_PASS=%s\nDATABASE_NAME=teslamate\nTM_TZ=Europe/Rome\nFQDN_TM=%s\nLETSENCRYPT_EMAIL=%s\nBASIC_AUTH_USER=teslamate\nBASIC_AUTH_PASSWORD=%s\nGRAFANA_ADMIN_USER=admin\nGRAFANA_ADMIN_PASSWORD=%s\nMQTT_PORT=1883\n" "$ENCRYPTION_KEY" "$DATABASE_PASS" "$FQDN_TM" "$LETSENCRYPT_EMAIL" "$BASIC_AUTH_PASSWORD" "$GRAFANA_ADMIN_PASSWORD" > .env; docker compose -f compose.yml config --quiet; docker compose -f compose.yml up -d --build --wait; docker compose -f compose.yml ps; printf "\nTeslaMate: https://%s/\nGrafana:   https://%s/grafana\nBasic Auth: teslamate / %s\nGrafana:    admin / %s\n" "$FQDN_TM" "$FQDN_TM" "$BASIC_AUTH_PASSWORD" "$GRAFANA_ADMIN_PASSWORD"'
+FQDN_TM='teslamate.example.com' LETSENCRYPT_EMAIL='you@example.com' bash -c 'set -euo pipefail; git clone --depth 1 --branch main https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git; cd Teslamate-CustomGrafanaDashboards; ENCRYPTION_KEY="$(openssl rand -hex 32)"; DATABASE_PASS="$(openssl rand -hex 24)"; GRAFANA_ADMIN_PASSWORD="$(openssl rand -hex 24)"; BASIC_AUTH_PASSWORD="$(openssl rand -hex 18)"; printf "ENCRYPTION_KEY=%s\nDATABASE_USER=teslamate\nDATABASE_PASS=%s\nDATABASE_NAME=teslamate\nTM_TZ=Europe/Rome\nFQDN_TM=%s\nLETSENCRYPT_EMAIL=%s\nHTTP_PORT=80\nHTTPS_PORT=443\nBASIC_AUTH_USER=teslamate\nBASIC_AUTH_PASSWORD=%s\nGRAFANA_ADMIN_USER=admin\nGRAFANA_ADMIN_PASSWORD=%s\nMQTT_PORT=1883\n" "$ENCRYPTION_KEY" "$DATABASE_PASS" "$FQDN_TM" "$LETSENCRYPT_EMAIL" "$BASIC_AUTH_PASSWORD" "$GRAFANA_ADMIN_PASSWORD" > .env; docker compose -f compose.yml config --quiet; docker compose -f compose.yml up -d --build --wait; docker compose -f compose.yml ps; printf "\nTeslaMate: https://%s/\nGrafana:   https://%s/grafana\nBasic Auth: teslamate / %s\nGrafana:    admin / %s\n" "$FQDN_TM" "$FQDN_TM" "$BASIC_AUTH_PASSWORD" "$GRAFANA_ADMIN_PASSWORD"'
 ```
 
 Il comando:
 
 1. clona `main`;
 2. genera automaticamente chiave di cifratura e password casuali;
-3. crea `.env`;
+3. crea `.env` con porte host standard 80/443 e MQTT 1883;
 4. valida il modello Compose;
 5. costruisce le immagini locali `sinapse/teslamate:local` e `sinapse/teslamate-grafana:local`;
 6. genera automaticamente `/auth/.htpasswd` dentro un volume Docker usando bcrypt;
@@ -132,13 +176,15 @@ Le credenziali restano nel file locale `.env`, escluso da Git. **Non rigenerare 
 
 Il servizio `proxy`:
 
-- ascolta su 80 e 443;
+- ascolta internamente su 80 e 443;
+- pubblica sull'host `${HTTP_PORT:-80}` e `${HTTPS_PORT:-443}`;
+- pubblica HTTPS sia TCP sia UDP sulla stessa `HTTPS_PORT` per HTTP/3;
 - reindirizza HTTP verso HTTPS;
 - usa il Docker provider con `exposedByDefault=false`;
 - legge soltanto il socket Docker in modalità read-only;
 - usa il resolver ACME `tmhttpchallenge`;
 - salva i certificati nel volume `traefik-acme`;
-- abilita HTTP/3 su 443/UDP.
+- abilita HTTP/3 sulla porta interna 443/UDP.
 
 ### Basic Auth TeslaMate
 
@@ -209,7 +255,7 @@ docker compose -f compose.yml ps
 docker compose -f compose.yml logs --tail=100 proxy teslamate grafana
 ```
 
-**Migrazione dalla precedente configurazione senza Traefik:** conserva esattamente `ENCRYPTION_KEY`, `DATABASE_PASS`, `DATABASE_USER`, `DATABASE_NAME` e la password Grafana già usati. Aggiungi al `.env` oppure alle variabili Portainer `FQDN_TM`, `LETSENCRYPT_EMAIL`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` e `TM_TZ`. Dopo il passaggio, 4000/3000 non sono più pubblicate direttamente: usa gli URL HTTPS Traefik.
+**Migrazione dalla precedente configurazione senza Traefik:** conserva esattamente `ENCRYPTION_KEY`, `DATABASE_PASS`, `DATABASE_USER`, `DATABASE_NAME` e la password Grafana già usati. Aggiungi al `.env` oppure alle variabili Portainer `FQDN_TM`, `LETSENCRYPT_EMAIL`, `HTTP_PORT`, `HTTPS_PORT`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` e `TM_TZ`. Se non hai esigenze particolari usa `HTTP_PORT=80` e `HTTPS_PORT=443`. Dopo il passaggio, 4000/3000 non sono più pubblicate direttamente: usa gli URL HTTPS Traefik.
 
 **Migrazione da un Compose/PostgreSQL precedente:** non collegare alla cieca vecchi volumi. PostgreSQL 18 usa il volume montato su `/var/lib/postgresql`, con sottocartella della versione; un volume PostgreSQL precedente montato su `/var/lib/postgresql/data` richiede una migrazione esplicita. Cambiare soltanto il percorso può far apparire un database vuoto.
 
@@ -220,7 +266,7 @@ Il workflow parte su push a `main`, manualmente e ogni giorno alle **06:23 UTC**
 1. Risolve l'ultima release stabile pubblicata di entrambi gli upstream e verifica SHA e tag precedenti.
 2. Prepara un candidato in un worktree temporaneo: merge normale per TeslaMate, merge con prefisso `custom/` per Customs. Le patch italiane restano nella cronologia locale.
 3. Conserva traduzioni e infrastruttura della distribuzione; rigenera dashboard ufficiali e custom italiane. I workflow upstream importati non sono attivi: rimane un solo YAML in `.github/workflows/`.
-4. Esegue controlli dei cataloghi, test Python, build dei due Dockerfile, suite Elixir inclusi test linguistici/plurali, validazione del Compose all-in-one con Traefik, migrazioni su database temporaneo, pianificazione SQL delle dashboard custom, avvio HTTP dell'applicazione e provisioning/API/healthcheck Grafana.
+4. Esegue controlli dei cataloghi, test Python, build dei due Dockerfile, suite Elixir inclusi test linguistici/plurali, validazione del Compose all-in-one con Traefik **anche con porte host non standard**, migrazioni su database temporaneo, pianificazione SQL delle dashboard custom, avvio HTTP dell'applicazione e provisioning/API/healthcheck Grafana.
 5. Pubblica su `main` soltanto dopo i controlli, con push ordinario. Non esegue rebase né force-push; un aggiornamento concorrente blocca la pubblicazione. I push di stato creati dal bot usano un gruppo di concorrenza separato e non possono più cancellare il run padre durante l'upload degli artefatti.
 
 Errori, conflitti, tag spostati, traduzioni mancanti e incompatibilità generano una Issue dettagliata e lasciano il candidato non pubblicato. Nuove frasi non sono tradotte automaticamente per supposizione: la Issue elenca le voci da aggiungere ai dizionari. Una nuova release TeslaMate produce anche una Issue di revisione con il diff.
