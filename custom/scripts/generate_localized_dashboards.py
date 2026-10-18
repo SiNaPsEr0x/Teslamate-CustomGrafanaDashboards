@@ -58,7 +58,6 @@ def rewrite_sql_aliases(value: str, alias_map: dict[str, str]) -> str:
     return value
 
 
-
 def rewrite(value, strings: dict[str, str], passthrough: set[str], alias_map: dict[str, str]):
     if isinstance(value, list):
         return [rewrite(item, strings, passthrough, alias_map) for item in value]
@@ -136,11 +135,31 @@ def translate_field_labels(dashboard: dict, strings: dict[str, str]):
                 existing.setdefault("properties", []).append({"id": "displayName", "value": target})
 
 
+def ensure_teslamate_navigation(dashboard: dict) -> None:
+    """Ensure every generated dashboard can return to the TeslaMate web UI."""
+    links = dashboard.setdefault("links", [])
+    if any(isinstance(link, dict) and link.get("url") == "${base_url:raw}" for link in links):
+        return
+    links.append({
+        "asDropdown": False,
+        "icon": "external link",
+        "includeVars": False,
+        "keepTime": False,
+        "tags": [],
+        "targetBlank": False,
+        "title": "TeslaMate",
+        "tooltip": "Torna a TeslaMate",
+        "type": "link",
+        "url": "${base_url:raw}",
+    })
+
+
 def localize_dashboard(source: dict, stem: str, pack: dict) -> dict:
     strings = pack.get("strings", {})
     passthrough = set(pack.get("passthrough", []))
     localized = rewrite(copy.deepcopy(source), strings, passthrough, {})
     translate_field_labels(localized, strings)
+    ensure_teslamate_navigation(localized)
     title = (pack.get("dashboard_titles") or {}).get(stem)
     if title:
         localized["title"] = title
