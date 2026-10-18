@@ -28,15 +28,22 @@ def raw_sql(value):
 
 
 def ensure_custom_navigation():
-    """Reapply the distribution navigation patch after every Customs merge."""
-    localizer = load_module('custom_localizer', ROOT / 'custom/scripts/generate_localized_dashboards.py')
+    """Reapply the canonical TeslaMate link after every Customs merge."""
     changed = []
+    link = {
+        'icon': 'dashboard',
+        'tags': [],
+        'title': 'TeslaMate',
+        'tooltip': '',
+        'type': 'link',
+        'url': '${base_url:raw}',
+    }
     for path in sorted((ROOT / 'custom/dashboards').glob('*.json')):
         data = json.loads(path.read_text())
-        urls = [link.get('url') for link in data.get('links', []) or [] if isinstance(link, dict)]
+        urls = [item.get('url') for item in data.get('links', []) or [] if isinstance(item, dict)]
         if '${base_url:raw}' in urls:
             continue
-        localizer.ensure_teslamate_navigation(data)
+        data.setdefault('links', []).insert(0, link.copy())
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
         changed.append(path.name)
     return changed
