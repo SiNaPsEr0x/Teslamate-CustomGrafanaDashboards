@@ -1,4 +1,9 @@
 {
   "custom_dashboards_release": "v2026.10.15",
-  "teslamate_release": "v4.3.0"
+  "teslamate_release": "v4.3.0",
+  "custom_dashboards_commit": "f473c3eb7b99d03b52a921c9c6f4da4ebcc2f8b8",
+  "custom_dashboards_release_id": 413657803,
+  "teslamate_commit": "33d200b2fba9d5138803916a788cef5eae31b1aa",
+  "teslamate_release_id": 399242545,
+  "compatibility_validation": "SQL and Grafana provisioning passed"
 }
