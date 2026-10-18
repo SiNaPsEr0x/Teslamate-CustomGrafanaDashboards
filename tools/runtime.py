@@ -79,7 +79,9 @@ def main(output):
 
         assert any(v['target'] == '/var/lib/postgresql' for v in database['volumes'])
         assert teslamate['image'] == 'ghcr.io/sinapser0x/teslamate:latest'
-        assert grafana_service['image'] == 'ghcr.io/sinapser0x/teslamate-grafana:latest'
+        assert grafana_service['image'] == teslamate['image']
+        assert teslamate['environment']['SINAPSE_SERVICE'] == 'teslamate'
+        assert grafana_service['environment']['SINAPSE_SERVICE'] == 'grafana'
         assert proxy['image'].startswith('traefik:v3.6')
         assert auth['image'].startswith('httpd:2.4')
         assert not teslamate.get('ports'), 'TeslaMate must only be exposed through Traefik'
@@ -96,12 +98,12 @@ def main(output):
         assert grafana_service['labels']['traefik.http.routers.grafana.tls.certresolver'] == 'tmhttpchallenge'
         report['compose'] = (
             'validated all-in-one Traefik HTTPS, configurable host ports, generated Basic Auth, '
-            'prebuilt GHCR images and PostgreSQL 18 volume layout'
+            'one shared prebuilt GHCR image and PostgreSQL 18 volume layout'
         )
 
-        command('docker', 'build', '-t', teslamate['image'], '-f', 'Dockerfile', '.', label='build-teslamate', timeout=2700)
-        command('docker', 'build', '-t', grafana_service['image'], '-f', 'grafana/Dockerfile', '.', label='build-grafana', timeout=2700)
-        report['builds'] = 'TeslaMate and Grafana built from this patched source tree'
+        command('docker', 'build', '-t', teslamate['image'], '-f', 'Dockerfile.unified', '.',
+                label='build-unified', timeout=2700)
+        report['builds'] = 'single unified image built with TeslaMate and localized Grafana from this patched source tree'
         command('docker', 'network', 'create', prefix)
         command('docker', 'run', '-d', '--name', db, '--network', prefix, '--network-alias', 'database',
                 '-e', 'POSTGRES_USER=teslamate', '-e', 'POSTGRES_PASSWORD=ci-test-password',
@@ -120,21 +122,23 @@ def main(output):
                 'mix format --check-formatted test/teslamate_web/gettext_i18n_test.exs test/teslamate_web/grafana_i18n_test.exs; '
                 'mix test --warnings-as-errors', label='elixir-tests', timeout=1800)
         report['elixir'] = 'full mix test --warnings-as-errors, including Italian plural and Grafana locale tests'
-        command('docker', 'run', '--name', migration, '--network', prefix, *env,
+        command('docker', 'run', '--name', migration, '--network', prefix, '--user', '10000:10001', '-w', '/opt/app', *env,
                 '--entrypoint', '/opt/app/bin/teslamate', teslamate['image'],
                 'eval', 'TeslaMate.Release.migrate()', label='migrations')
         for name, directory in [('custom-source', ROOT / 'custom'), ('custom-italian', output / 'custom')]:
             command(sys.executable, ROOT / 'custom/scripts/validate_dashboards.py', '--root', directory,
                     '--docker', db, '--strict', label='sql-' + name, timeout=900)
         report['sql'] = 'original and Italian custom queries prepared and planned with zero warnings against patched app migrations'
-        command('docker', 'run', '-d', '--name', app, '--network', prefix, *env,
-                '-e', 'HTTP_BINDING_ADDRESS=0.0.0.0', '-p', '127.0.0.1::4000', teslamate['image'])
+        command('docker', 'run', '-d', '--name', app, '--network', prefix, '--user', '10000:10001', *env,
+                '-e', 'SINAPSE_SERVICE=teslamate', '-e', 'HTTP_BINDING_ADDRESS=0.0.0.0',
+                '-p', '127.0.0.1::4000', teslamate['image'])
         app_url = 'http://127.0.0.1:' + port(app, '4000/tcp')
         body = retry(lambda: get(app_url + '/')).decode()
         assert 'TeslaMate' in body
-        report['app'] = 'patched application boots and serves HTTP'
-        command('docker', 'run', '-d', '--name', grafana, '--network', prefix, *env,
-                '-e', 'GF_AUTH_BASIC_ENABLED=true', '-e', 'GF_SECURITY_ADMIN_PASSWORD=ci-test-password',
+        report['app'] = 'TeslaMate mode from unified image boots and serves HTTP'
+        command('docker', 'run', '-d', '--name', grafana, '--network', prefix, '--user', '472:0', *env,
+                '-e', 'SINAPSE_SERVICE=grafana', '-e', 'GF_AUTH_BASIC_ENABLED=true',
+                '-e', 'GF_SECURITY_ADMIN_PASSWORD=ci-test-password',
                 '-p', '127.0.0.1::3000', grafana_service['image'])
         base = 'http://127.0.0.1:' + port(grafana, '3000/tcp')
         expected = {}
