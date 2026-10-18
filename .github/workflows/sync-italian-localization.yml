@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   distribution:
-    if: github.repository == 'SiNaPsEr0x/Teslamate-CustomGrafanaDashboards'
+    if: github.repository == 'SiNaPsEr0x/Teslamate-CustomGrafanaDashboards' && (github.event_name != 'push' || github.event.head_commit.author.name != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -21,6 +21,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          ssh-key: ${{ secrets.SINAPSE_UNIFIED_SYNC_SSH_KEY }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"

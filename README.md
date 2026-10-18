@@ -81,3 +81,12 @@ Gli artefatti `sinapse-teslamate-RUN_ID` contengono dashboard generate, report, 
 - `docs/TESLAMATE-UPSTREAM.md`: README TeslaMate originale al momento dell'importazione.
 
 TeslaMate mantiene la sua licenza **AGPL-3.0-or-later**, con `LICENSE` e `NOTICE` nella radice. Customs mantiene la propria licenza in `custom/LICENSE`. Questa distribuzione conserva i sorgenti e le attribuzioni dei rispettivi autori; non è una release ufficiale dei due progetti.
+
+
+## Protezione del branch e autenticazione dell'automazione
+
+L'aggiornamento usa la chiave deploy dedicata **SiNaPsE unified automatic updates**, limitata a questa repository. La parte privata è custodita nel Secret Actions `SINAPSE_UNIFIED_SYNC_SSH_KEY`; non è contenuta nei sorgenti o negli artefatti. Il token temporaneo `GITHUB_TOKEN` serve per interrogare le release e gestire le Issue.
+
+Due ruleset proteggono `main`: uno vieta force-push e cancellazione senza eccezioni; l'altro mantiene revisione, approvazione dell'ultimo push e firme per i contributi ordinari, con bypass per amministratori e chiavi deploy. La chiave dedicata consente al workflow di pubblicare dopo le proprie verifiche senza richiedere ogni volta una PR. I push dell'automazione non avviano nuovamente il workflow.
+
+La precedente sincronizzazione generica del bot Pull è disabilitata con `.github/pull.yml`: il controllo dei due upstream è gestito dall'unico workflow della distribuzione.

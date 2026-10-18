@@ -23,7 +23,7 @@ BASE_RELEASE = '33d200b2fba9d5138803916a788cef5eae31b1aa'
 DASHBOARD_PATCH = '40910165'
 STATE = '.github/unified-state.json'
 WORKFLOW = '.github/workflows/sync-italian-localization.yml'
-KEEP = ['tools', 'config', 'compose.yml', '.env.example', 'README.md', WORKFLOW]
+KEEP = ['tools', 'config', 'compose.yml', '.env.example', 'README.md', '.github/pull.yml', WORKFLOW]
 
 
 def run(*argv, cwd=None, check=True, timeout=1200, input=None, env=None):
@@ -142,6 +142,7 @@ def bootstrap(root, work, start, controller, temporary):
 
 
 def normalize(root):
+    (root / '.github/pull.yml').write_text('version: \"1\"\nrules: []\n')
     workflows = root / '.github/workflows'
     for path in workflows.iterdir():
         if path.name != Path(WORKFLOW).name:

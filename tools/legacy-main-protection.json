@@ -1,0 +1,19 @@
+{
+  "description": "Protection settings captured before migration to automation-compatible rulesets on 2026-10-18",
+  "enforce_admins": false,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_linear_history": false,
+  "lock_branch": false,
+  "required_signatures": true,
+  "required_status_checks": {"strict": true, "contexts": []},
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": false,
+    "require_code_owner_reviews": true,
+    "require_last_push_approval": true,
+    "required_approving_review_count": 1
+  },
+  "replacement_rulesets": [25338224, 25338259],
+  "automation_deploy_key_id": 166830508,
+  "automation_secret_name": "SINAPSE_UNIFIED_SYNC_SSH_KEY"
+}
