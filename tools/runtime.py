@@ -121,21 +121,21 @@ def main(output):
                 'mix test --warnings-as-errors', label='elixir-tests', timeout=1800)
         report['elixir'] = 'full mix test --warnings-as-errors, including Italian plural and Grafana locale tests'
         command('docker', 'run', '--name', migration, '--network', prefix, *env,
-                '--entrypoint', '/opt/app/bin/teslamate', 'sinapse/teslamate:local',
+                '--entrypoint', '/opt/app/bin/teslamate', teslamate['image'],
                 'eval', 'TeslaMate.Release.migrate()', label='migrations')
         for name, directory in [('custom-source', ROOT / 'custom'), ('custom-italian', output / 'custom')]:
             command(sys.executable, ROOT / 'custom/scripts/validate_dashboards.py', '--root', directory,
                     '--docker', db, '--strict', label='sql-' + name, timeout=900)
         report['sql'] = 'original and Italian custom queries prepared and planned with zero warnings against patched app migrations'
         command('docker', 'run', '-d', '--name', app, '--network', prefix, *env,
-                '-e', 'HTTP_BINDING_ADDRESS=0.0.0.0', '-p', '127.0.0.1::4000', 'sinapse/teslamate:local')
+                '-e', 'HTTP_BINDING_ADDRESS=0.0.0.0', '-p', '127.0.0.1::4000', teslamate['image'])
         app_url = 'http://127.0.0.1:' + port(app, '4000/tcp')
         body = retry(lambda: get(app_url + '/')).decode()
         assert 'TeslaMate' in body
         report['app'] = 'patched application boots and serves HTTP'
         command('docker', 'run', '-d', '--name', grafana, '--network', prefix, *env,
                 '-e', 'GF_AUTH_BASIC_ENABLED=true', '-e', 'GF_SECURITY_ADMIN_PASSWORD=ci-test-password',
-                '-p', '127.0.0.1::3000', 'sinapse/teslamate-grafana:local')
+                '-p', '127.0.0.1::3000', grafana_service['image'])
         base = 'http://127.0.0.1:' + port(grafana, '3000/tcp')
         expected = {}
         for folder in [output / 'official', output / 'custom/dashboards']:
