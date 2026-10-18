@@ -124,8 +124,8 @@ def main(output):
                 'eval', 'TeslaMate.Release.migrate()', label='migrations')
         for name, directory in [('custom-source', ROOT / 'custom'), ('custom-italian', output / 'custom')]:
             command(sys.executable, ROOT / 'custom/scripts/validate_dashboards.py', '--root', directory,
-                    '--docker', db, label='sql-' + name, timeout=900)
-        report['sql'] = 'original and Italian custom queries prepared and planned against patched app migrations'
+                    '--docker', db, '--strict', label='sql-' + name, timeout=900)
+        report['sql'] = 'original and Italian custom queries prepared and planned with zero warnings against patched app migrations'
         command('docker', 'run', '-d', '--name', app, '--network', prefix, *env,
                 '-e', 'HTTP_BINDING_ADDRESS=0.0.0.0', '-p', '127.0.0.1::4000', 'sinapse/teslamate:local')
         app_url = 'http://127.0.0.1:' + port(app, '4000/tcp')
