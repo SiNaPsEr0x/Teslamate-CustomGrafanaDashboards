@@ -27,6 +27,21 @@ def raw_sql(value):
         for item in value: yield from raw_sql(item)
 
 
+def ensure_custom_navigation():
+    """Reapply the distribution navigation patch after every Customs merge."""
+    localizer = load_module('custom_localizer', ROOT / 'custom/scripts/generate_localized_dashboards.py')
+    changed = []
+    for path in sorted((ROOT / 'custom/dashboards').glob('*.json')):
+        data = json.loads(path.read_text())
+        urls = [link.get('url') for link in data.get('links', []) or [] if isinstance(link, dict)]
+        if '${base_url:raw}' in urls:
+            continue
+        localizer.ensure_teslamate_navigation(data)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+        changed.append(path.name)
+    return changed
+
+
 def main(output):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -38,6 +53,9 @@ def main(output):
     required = {(f.get('msgctxt'), f['msgid']) for _, f in entries((ROOT / 'elixir/priv/gettext/default.pot').read_text())}
     if required - active:
         raise ValueError('Catalog is missing msgids from POT: ' + repr(required - active))
+    patched_navigation = ensure_custom_navigation()
+    subprocess.run([sys.executable, 'scripts/validate_dashboards.py', '--strict'],
+                   cwd=ROOT / 'custom', check=True)
     subprocess.run([sys.executable, 'scripts/validate_localization.py'], cwd=ROOT / 'custom', check=True)
     subprocess.run([sys.executable, 'scripts/generate_localized_dashboards.py', '--output', str(output / 'custom/dashboards')],
                    cwd=ROOT / 'custom', check=True)
@@ -68,6 +86,7 @@ def main(output):
         assert result['title'] == pack['dashboard_titles'][relative]
     info = {'gettext_entries': count, 'official_dashboards': len(paths),
             'custom_dashboards': len(list((output / 'custom/dashboards').glob('*.json'))),
+            'custom_navigation_patched': patched_navigation,
             'official_sql': 'unchanged', 'workflows': 1}
     (output / 'localization.json').write_text(json.dumps(info, indent=2) + '\n')
     print(json.dumps(info, indent=2))
