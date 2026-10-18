@@ -10,7 +10,7 @@ Distribuzione integrata di **TeslaMate**, dashboard Grafana ufficiali e **TeslaM
 |---|---|---|
 | Applicazione TeslaMate | [teslamate-org/teslamate](https://github.com/teslamate-org/teslamate) | Catalogo italiano completo per la release, verifica dei plurali `msgstr[0]` e `msgstr[1]`, navigazione Grafana in base alla lingua |
 | Dashboard ufficiali | `grafana/dashboards/` | Copie italiane con UID `-it`, titoli e campi visualizzati tradotti, SQL e variabili tecniche conservati |
-| Custom Dashboards | [jheredianet/Teslamate-CustomGrafanaDashboards](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards), importato in `custom/` | 15 dashboard italiane iniziali, dizionario e validatore dedicati, nessuna riscrittura degli alias SQL |
+| Custom Dashboards | [jheredianet/Teslamate-CustomGrafanaDashboards](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards), importato in `custom/` | 15 dashboard italiane iniziali, dizionario e validatore dedicati, nessuna riscrittura degli alias SQL, collegamento di ritorno a TeslaMate garantito nelle copie generate |
 | Grafana | Dockerfile della release TeslaMate con integrazioni locali | Dashboard ufficiali inglesi/italiane e cartella **Custom TeslaMate · Italiano**, datasource con UID esplicito `TeslaMate` |
 | Docker Compose | `compose.yml` nella radice | Build delle immagini dai sorgenti modificati, database PostgreSQL 18, MQTT, healthcheck, password richieste, dati persistenti |
 | Aggiornamenti | Unico workflow `SiNaPsE · TeslaMate Italiano + Custom Dashboards` | Controllo di entrambi gli upstream, merge, validazione, test e pubblicazione transazionale su `main` |
@@ -19,27 +19,25 @@ La migrazione iniziale applica le sole patch linguistiche del fork `SiNaPsEr0x/t
 
 La cronologia dei due progetti e delle personalizzazioni è conservata. I branch storici rimossi sono recuperabili attraverso i tag `archive/2026-10-18/…`. Il vecchio `patch-1` modificava soglie di una dashboard BatteryHealth ormai sostituita upstream: è conservato nel tag archivio, senza ripristinare una dashboard obsoleta. Il vecchio fork separato `SiNaPsEr0x/teslamate` resta disponibile come archivio di provenienza; l'installazione integrata è questa repository.
 
-## Installazione nuova
+## Installazione Docker in un unico comando
 
-Richiede Docker Engine e Docker Compose v2, accesso Internet per scaricare e compilare le immagini, spazio per database e build. Le immagini locali contengono realmente queste patch; non vengono usate immagini TeslaMate standard prive delle modifiche.
+Richiede **Docker Engine**, **Docker Compose v2**, `git` e `openssl`, oltre all'accesso Internet e allo spazio necessario per database e build. Il comando seguente clona `main`, genera automaticamente tre credenziali casuali, crea `.env`, valida Compose, compila le immagini personalizzate, avvia l'intero stack e mostra lo stato finale.
 
 ```bash
-git clone --branch main https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git
-cd Teslamate-CustomGrafanaDashboards
-cp .env.example .env
-# Modifica .env: imposta ENCRYPTION_KEY, DATABASE_PASS e GRAFANA_ADMIN_PASSWORD.
-# I valori di esempio non devono essere usati in produzione.
-${EDITOR:-nano} .env
-docker compose -f compose.yml config --quiet
-docker compose -f compose.yml up -d --build
-docker compose -f compose.yml ps
+git clone --depth 1 --branch main https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git && cd Teslamate-CustomGrafanaDashboards && printf 'ENCRYPTION_KEY=%s\nDATABASE_PASS=%s\nGRAFANA_ADMIN_PASSWORD=%s\nBIND_ADDRESS=127.0.0.1\nTESLAMATE_PORT=4000\nGRAFANA_PORT=3000\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 24)" "$(openssl rand -hex 24)" > .env && docker compose -f compose.yml config --quiet && docker compose -f compose.yml up -d --build && docker compose -f compose.yml ps
 ```
 
-Accesso locale predefinito: TeslaMate `http://127.0.0.1:4000`, Grafana `http://127.0.0.1:3000` (utente `admin`, password impostata in `.env`). Per l'accesso LAN modifica `BIND_ADDRESS` in `.env` prima dell'avvio, usando una configurazione di rete e accesso adeguata.
+### Cosa crea
+
+Compose costruisce direttamente dai sorgenti di questa repository due immagini locali: `sinapse/teslamate:local` con TeslaMate e le patch italiane, e `sinapse/teslamate-grafana:local` con Grafana, dashboard ufficiali italiane e Custom Dashboards italiane. Avvia inoltre PostgreSQL 18 e Mosquitto. Il database deve diventare `healthy` prima dell'avvio dei servizi che ne dipendono.
+
+Le credenziali generate restano esclusivamente nel file locale `.env`, che è escluso da Git. Per recuperare la password amministratore Grafana dopo l'installazione usa `grep GRAFANA_ADMIN_PASSWORD .env`. Non rigenerare `ENCRYPTION_KEY` su un'installazione esistente: TeslaMate la usa per i dati cifrati.
+
+Accesso locale predefinito: TeslaMate `http://127.0.0.1:4000`, Grafana `http://127.0.0.1:3000` con utente `admin`. Il bind su `127.0.0.1` evita di pubblicare automaticamente i servizi sulla LAN. Se il server deve essere raggiungibile da altri dispositivi, modifica consapevolmente `BIND_ADDRESS` in `.env` e ricrea i container.
 
 In TeslaMate seleziona **Italiano** nelle impostazioni della lingua per usare anche i collegamenti alle dashboard ufficiali italiane. Le Custom Dashboards italiane sono già integrate nell'immagine Grafana, senza download o bind mount manuali. Il datasource configurato nell'immagine ha nome e UID `TeslaMate`. Non aggiungere un secondo datasource con lo stesso nome.
 
-I dati persistono nei volumi `teslamate-db`, `teslamate-grafana`, `mosquitto-conf` e `mosquitto-data`. Il database non espone la porta PostgreSQL sull'host; MQTT resta nella rete Compose. `.env` è escluso da Git.
+I dati persistono nei volumi `teslamate-db`, `teslamate-grafana`, `mosquitto-conf` e `mosquitto-data`. Il database non espone la porta PostgreSQL sull'host; MQTT resta nella rete Compose.
 
 ## Aggiornare una propria installazione
 
@@ -70,7 +68,7 @@ Il workflow parte su push a `main`, manualmente e ogni giorno alle **06:23 UTC**
 
 Errori, conflitti, tag spostati, traduzioni mancanti e incompatibilità generano una Issue dettagliata e lasciano il candidato non pubblicato. Nuove frasi non sono tradotte automaticamente per supposizione: la Issue elenca le voci da aggiungere ai dizionari. Una nuova release TeslaMate produce anche una Issue di revisione con il diff, perché i test automatici non coprono ogni combinazione di dati o interazione del browser.
 
-Gli artefatti `sinapse-teslamate-RUN_ID` contengono dashboard generate, report, log di build/test/migrazioni/SQL/Grafana e diff degli upstream. Durata: 30 giorni. Le esecuzioni senza nuove release ripetono le verifiche e non creano commit quando lo stato è invariato.
+Gli artefatti `sinapse-teslamate-RUN_ID` contengono dashboard generate, report, log di build/test/migrazioni/SQL/Grafana e diff degli upstream. Durata: 30 giorni. Le esecuzioni senza nuove release ripetono le verifiche e non creano commit quando lo stato è invariato. L'upload degli artefatti usa l'azione corrente basata sul runtime Node 24.
 
 ## Struttura e licenze
 
@@ -81,7 +79,6 @@ Gli artefatti `sinapse-teslamate-RUN_ID` contengono dashboard generate, report, 
 - `docs/TESLAMATE-UPSTREAM.md`: README TeslaMate originale al momento dell'importazione.
 
 TeslaMate mantiene la sua licenza **AGPL-3.0-or-later**, con `LICENSE` e `NOTICE` nella radice. Customs mantiene la propria licenza in `custom/LICENSE`. Questa distribuzione conserva i sorgenti e le attribuzioni dei rispettivi autori; non è una release ufficiale dei due progetti.
-
 
 ## Protezione del branch e autenticazione dell'automazione
 
