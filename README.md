@@ -1,221 +1,83 @@
-# TeslaMate Custom Grafana Dashboards
+# SiNaPsE · TeslaMate Italiano + Custom Dashboards 🇮🇹
 
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
-[![Stargazers][stars-shield]][stars-url][![Contributors][contributors-shield]][contributors-url][![Forks][forks-shield]][forks-url][![Issues][issues-shield]][issues-url][![Discussions][discussions-shield]][discussions-url][![MIT License][license-shield]][license-url]
+Distribuzione integrata di **TeslaMate**, dashboard Grafana ufficiali e **TeslaMate Custom Grafana Dashboards**, con le personalizzazioni italiane di SiNaPsEr0x.
 
-This is a project with **Custom Grafana Dashboards**, created especially to work with a **Teslamate installation**. So the main requirement for these dashboards to work, is to have a **[Teslamate](https://docs.teslamate.org/)** running instance.
+**Un solo branch operativo e predefinito: `main`. Un solo workflow GitHub Actions.**
 
-## TeslaMate
+## Componenti e provenienza
 
-**[Teslamate](https://docs.teslamate.org/)** is a powerful, self-hosted data logger for your Tesla.
+| Componente | Sorgente | Personalizzazioni di questa versione |
+|---|---|---|
+| Applicazione TeslaMate | [teslamate-org/teslamate](https://github.com/teslamate-org/teslamate) | Catalogo italiano completo per la release, verifica dei plurali `msgstr[0]` e `msgstr[1]`, navigazione Grafana in base alla lingua |
+| Dashboard ufficiali | `grafana/dashboards/` | Copie italiane con UID `-it`, titoli e campi visualizzati tradotti, SQL e variabili tecniche conservati |
+| Custom Dashboards | [jheredianet/Teslamate-CustomGrafanaDashboards](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards), importato in `custom/` | 15 dashboard italiane iniziali, dizionario e validatore dedicati, nessuna riscrittura degli alias SQL |
+| Grafana | Dockerfile della release TeslaMate con integrazioni locali | Dashboard ufficiali inglesi/italiane e cartella **Custom TeslaMate · Italiano**, datasource con UID esplicito `TeslaMate` |
+| Docker Compose | `compose.yml` nella radice | Build delle immagini dai sorgenti modificati, database PostgreSQL 18, MQTT, healthcheck, password richieste, dati persistenti |
+| Aggiornamenti | Unico workflow `SiNaPsE · TeslaMate Italiano + Custom Dashboards` | Controllo di entrambi gli upstream, merge, validazione, test e pubblicazione transazionale su `main` |
 
-- Written in **[Elixir](https://elixir-lang.org/)**
-- Data is stored in a **Postgres** database
-- Visualization and data analysis with **Grafana**
-- Vehicle data is published to a local **MQTT** Broker
+La migrazione iniziale applica le sole patch linguistiche del fork `SiNaPsEr0x/teslamate` alla release stabile **v4.3.0**, evitando di importare il codice `4.4.0-dev` presente nel vecchio branch. La base iniziale Customs è **v2026.10.15**. Le versioni, gli SHA immutabili e gli ID delle release effettivamente verificati sono registrati in [`.github/unified-state.json`](.github/unified-state.json): questo file è il riferimento aggiornato dopo ogni sincronizzazione.
 
-___
+La cronologia dei due progetti e delle personalizzazioni è conservata. I branch storici rimossi sono recuperabili attraverso i tag `archive/2026-10-18/…`. Il vecchio `patch-1` modificava soglie di una dashboard BatteryHealth ormai sostituita upstream: è conservato nel tag archivio, senza ripristinare una dashboard obsoleta. Il vecchio fork separato `SiNaPsEr0x/teslamate` resta disponibile come archivio di provenienza; l'installazione integrata è questa repository.
 
-## How to Auto-import these Custom Dashboards
+## Installazione nuova
 
-In order to auto-import all the dashboard files from this repository, considering that your are using the official  [Teslamate Docker install](https://docs.teslamate.org/docs/installation/docker) documentation guide, proceed as follows.
-
-**Note:** If you are using Teslamate without Docker you may skip these section and proceed to import manually.
-
-- The following command will clone the source files from this repository. This should be run in an appropriate directory within which you would like to keep it. You should also record this path and provide it later in the following steps. To keep it easy, you may run this your home path (~/) or modify it accordingly.
+Richiede Docker Engine e Docker Compose v2, accesso Internet per scaricare e compilare le immagini, spazio per database e build. Le immagini locali contengono realmente queste patch; non vengono usate immagini TeslaMate standard prive delle modifiche.
 
 ```bash
-git clone https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards.git
+git clone --branch main https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git
+cd Teslamate-CustomGrafanaDashboards
+cp .env.example .env
+# Modifica .env: imposta ENCRYPTION_KEY, DATABASE_PASS e GRAFANA_ADMIN_PASSWORD.
+# I valori di esempio non devono essere usati in produzione.
+${EDITOR:-nano} .env
+docker compose -f compose.yml config --quiet
+docker compose -f compose.yml up -d --build
+docker compose -f compose.yml ps
 ```
 
-- Edit your Teslamate "docker-compose.yml" file and add these two new lines at the end of the "volumes" section of the grafana container
+Accesso locale predefinito: TeslaMate `http://127.0.0.1:4000`, Grafana `http://127.0.0.1:3000` (utente `admin`, password impostata in `.env`). Per l'accesso LAN modifica `BIND_ADDRESS` in `.env` prima dell'avvio, usando una configurazione di rete e accesso adeguata.
 
-```yaml
-services:
-  ...
-  ...
-  grafana:
-    ...
-    ...
-    volumes:
-      - teslamate-grafana-data:/var/lib/grafana
-      - ~/Teslamate-CustomGrafanaDashboards/customdashboards.yml:/etc/grafana/provisioning/dashboards/customdashboards.yml
-      - ~/Teslamate-CustomGrafanaDashboards/dashboards:/TeslamateCustomDashboards
-```
+In TeslaMate seleziona **Italiano** nelle impostazioni della lingua per usare anche i collegamenti alle dashboard ufficiali italiane. Le Custom Dashboards italiane sono già integrate nell'immagine Grafana, senza download o bind mount manuali. Il datasource configurato nell'immagine ha nome e UID `TeslaMate`. Non aggiungere un secondo datasource con lo stesso nome.
 
-- Save your file and then **recreate** Grafana container (docker-compose up -d)
-- Browse the Grafana Dashboards from the Web and you should have a new "TeslaMate Custom Dashboards" folder
+I dati persistono nei volumi `teslamate-db`, `teslamate-grafana`, `mosquitto-conf` e `mosquitto-data`. Il database non espone la porta PostgreSQL sull'host; MQTT resta nella rete Compose. `.env` è escluso da Git.
 
-## Using other path for repository
+## Aggiornare una propria installazione
 
-Attention! On some VPS from certain providers like Google GCC, the user running docker engine is not the current user so it's home folder is different, or maybe you just want to use a specific folder for your data. If this is the case, it's better to use the **full path** of the repository where you cloned it, instead of using the home path of the current user (~/). So, be sure to modify the path of the volumes section accordingly, as the sample given below:
+Il workflow aggiorna e verifica il repository. **Non si collega al tuo server e non aggiorna automaticamente i container installati.**
 
-```yaml
-services:
-  ...
-  ...
-  grafana:
-    ...
-    ...
-    volumes:
-      - teslamate-grafana-data:/var/lib/grafana
-      - /some/path/Teslamate-CustomGrafanaDashboards/customdashboards.yml:/etc/grafana/provisioning/dashboards/customdashboards.yml
-      - /some/path/Teslamate-CustomGrafanaDashboards/dashboards:/TeslamateCustomDashboards
-```
-
-## How to update the Dashboards
-
-If you want to be sure that you are using the latest version of the Dashboards:
-
-- Pull again from the repository
+Prima di aggiornare un'installazione esistente, conserva backup del database, `.env`, versione/commit installato e dati Grafana. Un downgrade dei container non annulla le migrazioni PostgreSQL: per un rollback con schema incompatibile serve il backup precedente.
 
 ```bash
-git -C ~/Teslamate-CustomGrafanaDashboards pull
+cd Teslamate-CustomGrafanaDashboards
+git pull --ff-only origin main
+docker compose -f compose.yml config --quiet
+docker compose -f compose.yml up -d --build
+docker compose -f compose.yml ps
+docker compose -f compose.yml logs --tail=100 teslamate grafana
 ```
 
-- Then **restart** Grafana container (docker-compose restart grafana)
+**Migrazione da un Compose precedente:** non collegare alla cieca i vecchi volumi. Nomi/progetto Compose, credenziali, chiave di cifratura e UID datasource devono corrispondere all'installazione. PostgreSQL 18 usa il volume montato su `/var/lib/postgresql`, con sottocartella della versione; un volume PostgreSQL precedente montato su `/var/lib/postgresql/data` richiede una migrazione esplicita. Cambiare soltanto il percorso può far apparire un database vuoto. Anche i riferimenti ad altri UID datasource già usati da dashboard personali vanno verificati prima di sostituire il provisioning.
 
-___
+## Unica automazione
 
-## How to manually import these custom dashboards
+Il workflow parte su push a `main`, manualmente e ogni giorno alle **06:23 UTC**; GitHub può ritardare le esecuzioni pianificate e può disabilitarle dopo 60 giorni di inattività del repository.
 
-The following steps let you import the JSON files into your setup:
+1. Risolve l'ultima release stabile pubblicata di entrambi gli upstream e verifica SHA e tag precedenti.
+2. Prepara un candidato in un worktree temporaneo: merge normale per TeslaMate, merge con prefisso `custom/` per Customs. Le patch italiane restano nella cronologia locale.
+3. Conserva traduzioni e infrastruttura della distribuzione; rigenera dashboard ufficiali e custom italiane. I workflow upstream importati non sono attivi: rimane un solo YAML in `.github/workflows/`.
+4. Esegue controlli dei cataloghi, test Python, build dei due Dockerfile, suite Elixir inclusi test linguistici/plurali, validazione Compose, migrazioni su database temporaneo, preparazione e pianificazione SQL delle dashboard custom, avvio HTTP dell'applicazione e provisioning/API/healthcheck Grafana.
+5. Pubblica su `main` soltanto dopo i controlli, con push ordinario. Non esegue rebase né force-push; un aggiornamento concorrente blocca la pubblicazione.
 
-- On Grafana (from Teslamate instance), Browse Dashboards then Import...
-- Upload JSON file or import via panel json by pasting the raw content of te JSON file.
-- On the next screen you may name the dashboard as you wish or accept the suggested one.
-- Try to keep UID as it is, because it could be linked inside the dashboard and to avoid duplicates UIDs.
-- Then select the appropiate Teslamate datasource from the available droplist.
-- Finally, press the "Import" button
+Errori, conflitti, tag spostati, traduzioni mancanti e incompatibilità generano una Issue dettagliata e lasciano il candidato non pubblicato. Nuove frasi non sono tradotte automaticamente per supposizione: la Issue elenca le voci da aggiungere ai dizionari. Una nuova release TeslaMate produce anche una Issue di revisione con il diff, perché i test automatici non coprono ogni combinazione di dati o interazione del browser.
 
-___
+Gli artefatti `sinapse-teslamate-RUN_ID` contengono dashboard generate, report, log di build/test/migrazioni/SQL/Grafana e diff degli upstream. Durata: 30 giorni. Le esecuzioni senza nuove release ripetono le verifiche e non creano commit quando lo stato è invariato.
 
-## Screenshots
+## Struttura e licenze
 
-### [Battery Health](./dashboards/BatteryHealth.json)
+- Radice, `elixir/`, `grafana/`, `rust/`: sorgenti TeslaMate e patch locali.
+- `custom/`: progetto Customs completo, incluse traduzioni e documentazione originale.
+- `config/grafana/`: provisioning integrato.
+- `tools/`: importazione, sincronizzazione, validazione e test della distribuzione.
+- `docs/TESLAMATE-UPSTREAM.md`: README TeslaMate originale al momento dell'importazione.
 
-This dashboard is meant to have a look of the Battery health based on the data logged in Teslamate.
-So, the more data you have logged from your brand new car the better.
-
-**Possible degradation** is just an estimated value to have a reference, measured on **usable battery level** of every charging session with enough kWh added (in order to avoid dirty data from the sample), calculated daily according to the rated efficiency of the car. There are two charts showing the mean values based on the projected range - mileage with a **Monthly projected battery capacity** and a **Weekly projected range**.
-
-![Battery Health](./screenshots/BatteryHealth.png)
-
-### [Charging Costs Stats](./dashboards/ChargingCostsStats.json)
-
-This dashboard is meant to have a look of all the charges in a given period (last 10 years by default).
-You can see the distance driven, number of charges, total charging cost, etc., both in summary or in
-separated lists.
-
-You can expand/collapse the rows as needed.
-
-From the Monthly Stats row, you will have a table with links to other Teslamate Dashboards to have a look on a specific period, charge or trip.
-
-![Charging Costs Stats](./screenshots/ChargingCostsStats.png)
-
-### [Charging Curve Stats](./dashboards/ChargingCurveStats.json)
-
-This dashboard is meant to have a look of the charging curve sessions on Tesla Supercharges or other Fast Charging Station. Also, you can see number of fast charging sessions you've done on each type of chargers and the count of max power (kW) reached on a session as shown in the following example.
-
-![Charging Curve Stats](./screenshots/ChargingCurveStats.png)
-
-### [Continuous Trips](./dashboards/ContinuousTrips.json)
-
-This dashboard has a table with all the trips you've made between charges sesions, so you can browse the longest or shortest mileage you travel.
-
-You may also take a look to a specific trip from the initial charge session (before the trip) to the end of the of the charge session (after the trip), through the link in the first column that will take you to the TeslaMate Trips dashboard.
-
-![Continuous Trips](./screenshots/ContinuousTrips.png)
-
-### [Current Charge View](./dashboards/CurrentChargeView.json)
-
-Load this dashboard to while you are in a charging sesion. When you open this dashboard it will show the last 15 minutes, but you should click the "Current Charge" button at the top right corner, to enter in Kiosk mode:
-
-- If you are charging, you will see the information from the start time of the current charge session until now and it will refesh automatically every 30 seconds.
-- If you are just browsing (not charging) you will see the information of the last charge session.  
-
-![Current Charge View](./screenshots/CurrentChargeView.png)
-
-### [Current Drive View](./dashboards/CurrentDriveView.json)
-
-This is a special dashboard to load while driving. When you open this dashboard it will show the last 15 minutes, but you should click the "Current Drive" button at the top right corner, to enter in Kiosk mode:
-
-- If you are driving, you will see the information from the start time of the current drive until now and it will refesh automatically every 30 seconds.
-- If you are just browsing (not driving) you will see the information of the last drive.  
-
-![Current Drive View](./screenshots/CurrentDriveView.png)
-
-### [Current State](./dashboards/CurrentState.json)
-
-This dasboard is just to see the current state of the car with the last data recorded by TeslaMate.
-
-Additionally, you can see the states stats of the selected period.
-
-![Current State](./screenshots/CurrentState.png)
-
-### [Mileage Stats](./dashboards/MileageStats.json)
-
-With this dashboard you may analize your mileage and number of drives by year, month, week or day.
-
-The dashboard shows a table with the selected period, time driven, distance, number of drives and efficiency then a bar chart to have a better look for comparison.  
-
-![Mileage Stats](./screenshots/MileageStats.png)
-
-### [Tracking Drives](./dashboards/TrackingDrives.json)
-
-This dashboard is meant to analize a drive based on a date you select, then you can pass the pointer over the lines in graph
-to see data details and a blue point in the map tranking the route. With this option you can analized a specific point location in the map,
-to see the speed, power, SOC, elevation and if battery heater was on.
-
-Be aware that the drive you select in the dropdown list from the top could be outside the time range of the Timeline graph,
-if its the case you have to click on the "Zoom to data" button on the graph in order to update it.
-
-Tip: On Grafana you can press "h" to get a keyboard shortcuts if you want to change the current Zoom out time range or use the mouse to select/change the time range.
-
-![Tracking Drives](./screenshots/TrackingDrives.gif)
-
-## Contributing
-
-The following dashboards, queries and design are the result of many tests and hours of work.
-Feel free to take them for your own personal use.
-
-If you are able to contibute or improve this project just fork the repository and make a pull request. I'll really apreciate any enhancement or suggestion.
-
-Do not take the dashboards much less upload or merge them to other repositories as if the original idea were yours, nor do you share it on social media without mentioning the author. Please, **respect the ingenuity and work of others**. Enjoy!
-
-## Donations
-
-If you like my work and want to support me, buying me a coffee would be greatly appreciated! Your support helps me to keep creating and improving these dashboards. Thank you!
-
-[![Paypal Donate](https://img.shields.io/badge/Donate-PayPal-ff69b4.svg)](https://www.paypal.com/donate/?business=MAWY99TACEXSU&no_recurring=0&currency_code=EUR)
-
-## Credits
-
-- Author: [Juan Carlos Heredia](https://infoinnova.net/contacto/)
-- Based on/forked from [Adrian Kumpf](https://github.com/adriankumpf/teslamate) original code, with improvement of custom Grafana Dashboards (see [contributions history](https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/graphs/contributors)).
-
-## License
-
-Licensed under the [MIT license](./LICENSE).
-
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[contributors-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[forks-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/network/members
-[stars-shield]: https://img.shields.io/github/stars/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[stars-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/stargazers
-[issues-shield]: https://img.shields.io/github/issues/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[issues-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/issues
-[discussions-shield]: https://img.shields.io/github/discussions/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[discussions-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/discussions
-[license-shield]: https://img.shields.io/github/license/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
-[license-url]: ./LICENSE
+TeslaMate mantiene la sua licenza **AGPL-3.0-or-later**, con `LICENSE` e `NOTICE` nella radice. Customs mantiene la propria licenza in `custom/LICENSE`. Questa distribuzione conserva i sorgenti e le attribuzioni dei rispettivi autori; non è una release ufficiale dei due progetti.

@@ -1,0 +1,71 @@
+name: sinapse-teslamate
+services:
+  teslamate:
+    image: sinapse/teslamate:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+      MQTT_HOST: mosquitto
+    depends_on:
+      database:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${TESLAMATE_PORT:-4000}:4000"
+    volumes:
+      - ./import:/opt/app/import
+    cap_drop: [ALL]
+  database:
+    image: postgres:18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teslamate
+      POSTGRES_PASSWORD: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
+      POSTGRES_DB: teslamate
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - teslamate-db:/var/lib/postgresql
+  grafana:
+    image: sinapse/teslamate-grafana:local
+    build:
+      context: .
+      dockerfile: grafana/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_DEFAULT_LANGUAGE: it-IT
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - teslamate-grafana:/var/lib/grafana
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto-no-auth.conf
+    volumes:
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+volumes:
+  teslamate-db:
+  teslamate-grafana:
+  mosquitto-conf:
+  mosquitto-data:
