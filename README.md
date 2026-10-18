@@ -448,3 +448,48 @@ Licensed under the [MIT license][license-url].
 [discussions-url]: https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/discussions
 [license-shield]: https://img.shields.io/github/license/jheredianet/Teslamate-CustomGrafanaDashboards.svg?style=for-the-badge
 [license-url]: ./LICENSE
+
+### Automatic Italian localization: release monitoring
+
+The fork's `main` branch contains the scheduled launcher. It checks out
+`i18n/italian-localization-upstream` and runs every day at **06:23 UTC**;
+GitHub may delay scheduled runs. Manual runs are available from Actions →
+**Sync Italian localization upstreams** → **Run workflow**.
+GitHub can disable schedules after 60 days without repository activity;
+check the workflow remains enabled if the repository is inactive.
+
+The workflow resolves the latest stable published releases of
+`jheredianet/Teslamate-CustomGrafanaDashboards` and `teslamate-org/teslamate`.
+It records tags, release IDs and immutable commit SHAs. Previously recorded
+moved tags, divergent histories and missing baselines block publication.
+Custom release updates use a normal merge in a disposable Git worktree.
+Existing Italian translations must survive unchanged, and every newly visible
+string or dashboard title must be covered by `i18n/it.json`. Missing translations
+open an issue with the validator output; they are never silently accepted as
+translated. Add the missing Italian entries and rerun the workflow.
+
+Every run, including runs without new releases, generates Italian JSON and runs
+static checks, the sync regression tests, and runtime smoke tests. The runtime
+check uses disposable PostgreSQL 18 and the exact TeslaMate and Grafana image tags
+corresponding to the official release. It migrates an empty database, prepares
+and plans both original and translated SQL, then provisions and reads all Italian
+dashboards through Grafana's API. It checks the `TeslaMate` datasource UID too.
+Image digests and SQL/Grafana logs are included in the artifact. No production
+credentials or database are used. The smoke test does not test every data value,
+interactive visualization or browser rendering.
+
+TeslaMate diffs include both old and `elixir/` repository layouts, database
+migrations, Grafana, Docker/Compose, configuration, dependencies and installation
+documentation. Sensitive changes open a review issue with the changed paths,
+comparison link, run and full diff artifact even if smoke tests pass. Runtime
+incompatibilities, merge conflicts and missing translations block the candidate
+and open a deduplicated failure issue. No remote update occurs until validation
+succeeds. Publication uses only an ordinary fast-forward push, checks for
+concurrent user changes, and never rebases or force-pushes.
+
+Download **italian-localization-RUN_ID** from a successful run's artifacts: its
+`dashboards/` directory contains all generated Italian dashboards; `report.json`
+and `runtime.json` describe the validated releases and checks. Retention is 30
+days. Generated files preserve the original UIDs, so provision either the source
+or the Italian copies for a given UID, not both. The automation monitors and
+prepares releases; it does not deploy dashboards to your own Grafana server.
