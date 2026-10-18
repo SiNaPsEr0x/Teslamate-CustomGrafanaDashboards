@@ -53,8 +53,10 @@ services:
 
   teslamate:
     image: ghcr.io/sinapser0x/teslamate:latest
+    user: "10000:10001"
     restart: unless-stopped
     environment:
+      SINAPSE_SERVICE: teslamate
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
       DATABASE_USER: ${DATABASE_USER:-teslamate}
       DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
@@ -100,9 +102,11 @@ services:
       - teslamate-db:/var/lib/postgresql
 
   grafana:
-    image: ghcr.io/sinapser0x/teslamate-grafana:latest
+    image: ghcr.io/sinapser0x/teslamate:latest
+    user: "472:0"
     restart: unless-stopped
     environment:
+      SINAPSE_SERVICE: grafana
       DATABASE_USER: ${DATABASE_USER:-teslamate}
       DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
       DATABASE_NAME: ${DATABASE_NAME:-teslamate}
