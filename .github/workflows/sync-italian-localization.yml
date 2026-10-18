@@ -1,37 +1,50 @@
 name: SiNaPsE · TeslaMate Italiano + Custom Dashboards
+
 on:
   workflow_dispatch:
   schedule:
     - cron: "23 6 * * *"
   push:
     branches: [main]
+
 permissions:
   contents: write
   issues: write
   packages: write
+
 concurrency:
   # A successful run publishes one bot-authored state commit. Give that skipped
   # follow-up run its own group so it cannot cancel the parent during artifact upload.
   group: ${{ github.event_name == 'push' && github.event.head_commit.author.name == 'github-actions[bot]' && github.run_id || 'italian-localization-upstream-sync' }}
   cancel-in-progress: true
+
 jobs:
   distribution:
     if: github.repository == 'SiNaPsEr0x/Teslamate-CustomGrafanaDashboards' && (github.event_name != 'push' || github.event.head_commit.author.name != 'github-actions[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
     steps:
-      - uses: actions/checkout@v6
+      - name: Configure Git defaults
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout italiano
+        uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
           ssh-key: ${{ secrets.SINAPSE_UNIFIED_SYNC_SSH_KEY }}
-      - uses: actions/setup-python@v6
+
+      - name: Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
       - name: Update both upstreams, apply patches, build and test distribution
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/manage.py --runtime --publish --output "${{ runner.temp }}/unified-output"
+
       - name: Upload Italian dashboards and validation evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -39,31 +52,38 @@ jobs:
           name: sinapse-teslamate-${{ github.run_id }}
           path: ${{ runner.temp }}/unified-output/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
   publish-images:
     name: Publish unified Docker image to GHCR
     needs: distribution
     runs-on: ubuntu-latest
     timeout-minutes: 90
+
     steps:
+      - name: Configure Git defaults
+        run: git config --global init.defaultBranch main
+
       - name: Checkout validated main
         uses: actions/checkout@v6
         with:
           ref: main
           persist-credentials: false
+
       - name: Resolve validated commit
         id: source
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Authenticate with GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and publish unified TeslaMate + Grafana image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.unified
