@@ -21,6 +21,14 @@
   "graphTooltip": 0,
   "links": [
     {
+      "icon": "dashboard",
+      "tags": [],
+      "title": "TeslaMate",
+      "tooltip": "",
+      "type": "link",
+      "url": "${base_url:raw}"
+    },
+    {
       "asDropdown": true,
       "icon": "external link",
       "includeVars": false,
