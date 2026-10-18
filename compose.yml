@@ -52,10 +52,7 @@ services:
       - no-new-privileges:true
 
   teslamate:
-    image: sinapse/teslamate:local
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/sinapser0x/teslamate:latest
     restart: unless-stopped
     environment:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
@@ -103,10 +100,7 @@ services:
       - teslamate-db:/var/lib/postgresql
 
   grafana:
-    image: sinapse/teslamate-grafana:local
-    build:
-      context: .
-      dockerfile: grafana/Dockerfile
+    image: ghcr.io/sinapser0x/teslamate-grafana:latest
     restart: unless-stopped
     environment:
       DATABASE_USER: ${DATABASE_USER:-teslamate}
