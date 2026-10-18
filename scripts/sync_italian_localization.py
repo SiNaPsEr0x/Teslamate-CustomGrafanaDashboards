@@ -19,7 +19,7 @@ BRANCH = "i18n/italian-localization-upstream"
 STATE = ".github/i18n-upstream-state.json"
 SENSITIVE = re.compile(
     r"(^|/)(?:priv/repo/|grafana/|Dockerfile[^/]*$|[^/]*compose[^/]*\.ya?ml$|"
-    r"entrypoint[^/]*|mix\.(?:exs|lock)$|config/|installation/)"
+    r"entrypoint[^/]*|mix\.(?:exs|lock)$|config/|installation/|lib/teslamate/(?:log|repo|settings))"
 )
 
 
@@ -30,7 +30,7 @@ def run(*args, cwd=None, check=True, timeout=600, input=None):
         print(result.stdout, end="", flush=True)
     if result.returncode and check:
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(args)}\n"
-                           f"{result.stdout}\n{result.stderr}")
+                           f"{result.stdout[-18000:]}\n{result.stderr[-18000:]}")
     return result
 
 
@@ -170,6 +170,9 @@ def synchronize(args):
                 if len(paths) != len(list((work / "dashboards").glob("*.json"))) or not paths:
                     raise RuntimeError("Generated dashboard count mismatch")
                 report["generated_dashboards"] = len(paths)
+                provisioning = out / "provisioning/datasources"
+                provisioning.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(work / "i18n/teslamate-datasource.yml", provisioning / "datasource.yml")
                 stage = "runtime SQL and Grafana compatibility"
                 if not args.runtime:
                     if args.push:
@@ -209,7 +212,9 @@ def synchronize(args):
             finally:
                 git(root, "worktree", "remove", "--force", str(work))
     except Exception as exc:
-        report.update(status="failed", failed_stage=stage, error=str(exc))
+        report.update(status="failed", failed_stage=stage, error=str(exc)[-30000:])
+        if stage == "runtime SQL and Grafana compatibility":
+            report["runtime"] = "failed (see runtime and SQL logs)"
         print(f"ERROR: {stage}: {exc}", file=sys.stderr)
         if args.push:
             try:

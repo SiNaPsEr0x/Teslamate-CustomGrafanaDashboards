@@ -76,6 +76,7 @@ def main(args):
                     "-p", "127.0.0.1::3000", "--mount",
                     f"type=bind,source={generated},target=/italian-dashboards,readonly",
                     "--mount", f"type=bind,source={provisioning},target=/etc/grafana/provisioning/dashboards/italian.yml,readonly",
+                    "--mount", f"type=bind,source={root / 'i18n/teslamate-datasource.yml'},target=/etc/grafana/provisioning/datasources/datasource.yml,readonly",
                     f"teslamate/grafana:{tag}")
             port = command("docker", "port", grafana, "3000/tcp").stdout.strip().rsplit(":", 1)[1]
             base = f"http://127.0.0.1:{port}"
@@ -104,6 +105,10 @@ def main(args):
             datasource = get("/api/datasources/uid/TeslaMate")
             if datasource.get("type") not in {"postgres", "grafana-postgresql-datasource"}:
                 raise RuntimeError(f"Unexpected TeslaMate datasource: {datasource}")
+            datasource_health = get("/api/datasources/uid/TeslaMate/health")
+            if datasource_health.get("status") != "OK":
+                raise RuntimeError(f"Grafana datasource health failed: {datasource_health}")
+            runtime["datasource"] = "TeslaMate UID present and database health OK"
             for uid in expected:
                 loaded = get(f"/api/dashboards/uid/{uid}")
                 if loaded["dashboard"]["title"] != expected[uid]:

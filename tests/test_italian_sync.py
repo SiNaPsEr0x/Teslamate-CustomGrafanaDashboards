@@ -117,7 +117,7 @@ class LocalizationTests(unittest.TestCase):
                      "grafana/dashboards/a.json", "grafana/provisioning/datasource.yml",
                      "grafana/Dockerfile", "Dockerfile", "docker-compose.yml",
                      "compose.yaml", "scripts/docker-compose.yml", "elixir/mix.lock",
-                     "elixir/config/runtime.exs", "entrypoint.sh", "website/docs/installation/docker.md"):
+                     "elixir/config/runtime.exs", "elixir/lib/teslamate/log/drive.ex", "entrypoint.sh", "website/docs/installation/docker.md"):
             with self.subTest(path=name):
                 self.assertRegex(name, sync.SENSITIVE)
         self.assertNotRegex("README.md", sync.SENSITIVE)

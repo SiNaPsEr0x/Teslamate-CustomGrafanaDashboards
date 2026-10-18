@@ -493,3 +493,15 @@ and `runtime.json` describe the validated releases and checks. Retention is 30
 days. Generated files preserve the original UIDs, so provision either the source
 or the Italian copies for a given UID, not both. The automation monitors and
 prepares releases; it does not deploy dashboards to your own Grafana server.
+
+
+The official Grafana image does not assign the explicit datasource UID required
+by these custom dashboards on a fresh installation. The artifact therefore also
+contains `provisioning/datasources/datasource.yml`, copied from
+`i18n/teslamate-datasource.yml`, with `name: TeslaMate` and `uid: TeslaMate`.
+Mount it **in place of** `/etc/grafana/provisioning/datasources/datasource.yml`
+when provisioning the custom dashboards; do not load duplicate datasource names.
+It uses the official `DATABASE_*` environment variables. The runtime smoke test
+uses this same supplied configuration. Existing installations should check their
+UID before changing datasource provisioning, since other dashboards may reference
+an existing generated UID. The automation does not alter an installed Grafana.
