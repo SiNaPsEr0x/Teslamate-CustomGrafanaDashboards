@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "language_snapshot": "1f0d1235a6838c8c5adb5ebc1143e82eac768422",
+  "language_source_base": "33d200b2fba9d5138803916a788cef5eae31b1aa",
+  "custom_snapshot": "e82f3b22039d355a7c714689079829cb2035859a",
+  "teslamate": {
+    "release": "v4.3.0",
+    "commit": "33d200b2fba9d5138803916a788cef5eae31b1aa",
+    "release_id": 399242545,
+    "url": "https://github.com/teslamate-org/teslamate/releases/tag/v4.3.0"
+  },
+  "customs": {
+    "release": "v2026.10.15",
+    "commit": "f473c3eb7b99d03b52a921c9c6f4da4ebcc2f8b8",
+    "release_id": 413657803,
+    "url": "https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards/releases/tag/v2026.10.15"
+  },
+  "validation": "source builds, Elixir tests, Compose, SQL, app and Grafana passed"
+}
