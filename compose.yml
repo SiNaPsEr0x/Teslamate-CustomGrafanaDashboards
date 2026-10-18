@@ -1,5 +1,56 @@
 name: sinapse-teslamate
+
 services:
+  basic-auth:
+    image: httpd:2.4-alpine
+    restart: "no"
+    environment:
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-teslamate}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:?Set BASIC_AUTH_PASSWORD in .env}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        umask 077
+        htpasswd -nbB "$$BASIC_AUTH_USER" "$$BASIC_AUTH_PASSWORD" > /auth/.htpasswd
+    volumes:
+      - traefik-auth:/auth
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  proxy:
+    image: traefik:v3.6
+    restart: unless-stopped
+    depends_on:
+      basic-auth:
+        condition: service_completed_successfully
+    command:
+      - "--global.sendAnonymousUsage=false"
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http3.advertisedPort=443"
+      - "--certificatesresolvers.tmhttpchallenge.acme.httpchallenge=true"
+      - "--certificatesresolvers.tmhttpchallenge.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.tmhttpchallenge.acme.email=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}"
+      - "--certificatesresolvers.tmhttpchallenge.acme.storage=/etc/acme/acme.json"
+    ports:
+      - "80:80"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-acme:/etc/acme
+      - traefik-auth:/auth:ro
+    security_opt:
+      - no-new-privileges:true
+
   teslamate:
     image: sinapse/teslamate:local
     build:
@@ -8,28 +59,41 @@ services:
     restart: unless-stopped
     environment:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
-      DATABASE_USER: teslamate
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
       DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
-      DATABASE_NAME: teslamate
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
       DATABASE_HOST: database
       MQTT_HOST: mosquitto
+      VIRTUAL_HOST: ${FQDN_TM:?Set FQDN_TM in .env}
+      CHECK_ORIGIN: "true"
+      TZ: ${TM_TZ:-Europe/Rome}
     depends_on:
       database:
         condition: service_healthy
       mosquitto:
         condition: service_started
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${TESLAMATE_PORT:-4000}:4000"
     volumes:
       - ./import:/opt/app/import
-    cap_drop: [ALL]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.teslamate.loadbalancer.server.port: "4000"
+      traefik.http.middlewares.teslamate-auth.basicauth.realm: "teslamate"
+      traefik.http.middlewares.teslamate-auth.basicauth.usersfile: "/auth/.htpasswd"
+      traefik.http.routers.teslamate.rule: "Host(`${FQDN_TM}`)"
+      traefik.http.routers.teslamate.priority: "10"
+      traefik.http.routers.teslamate.entrypoints: "websecure"
+      traefik.http.routers.teslamate.middlewares: "teslamate-auth"
+      traefik.http.routers.teslamate.tls.certresolver: "tmhttpchallenge"
+    cap_drop:
+      - ALL
+
   database:
     image: postgres:18-trixie
     restart: unless-stopped
     environment:
-      POSTGRES_USER: teslamate
+      POSTGRES_USER: ${DATABASE_USER:-teslamate}
       POSTGRES_PASSWORD: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
-      POSTGRES_DB: teslamate
+      POSTGRES_DB: ${DATABASE_NAME:-teslamate}
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -37,6 +101,7 @@ services:
       retries: 20
     volumes:
       - teslamate-db:/var/lib/postgresql
+
   grafana:
     image: sinapse/teslamate-grafana:local
     build:
@@ -44,28 +109,47 @@ services:
       dockerfile: grafana/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_USER: teslamate
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
       DATABASE_PASS: ${DATABASE_PASS:?Set DATABASE_PASS in .env}
-      DATABASE_NAME: teslamate
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
       DATABASE_HOST: database
+      GRAFANA_PASSWD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
-      GF_USERS_DEFAULT_LANGUAGE: it-IT
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_DOMAIN: ${FQDN_TM:?Set FQDN_TM in .env}
+      GF_SERVER_ROOT_URL: "https://%(domain)s/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_USERS_DEFAULT_LANGUAGE: "it-IT"
+      TZ: ${TM_TZ:-Europe/Rome}
     depends_on:
       database:
         condition: service_healthy
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
     volumes:
       - teslamate-grafana:/var/lib/grafana
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.grafana.loadbalancer.server.port: "3000"
+      traefik.http.routers.grafana.rule: "Host(`${FQDN_TM}`) && (Path(`/grafana`) || PathPrefix(`/grafana/`))"
+      traefik.http.routers.grafana.priority: "100"
+      traefik.http.routers.grafana.entrypoints: "websecure"
+      traefik.http.routers.grafana.tls.certresolver: "tmhttpchallenge"
+
   mosquitto:
     image: eclipse-mosquitto:2
     restart: unless-stopped
     command: mosquitto -c /mosquitto-no-auth.conf
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
     volumes:
       - mosquitto-conf:/mosquitto/config
       - mosquitto-data:/mosquitto/data
+
 volumes:
   teslamate-db:
   teslamate-grafana:
   mosquitto-conf:
   mosquitto-data:
+  traefik-acme:
+  traefik-auth:

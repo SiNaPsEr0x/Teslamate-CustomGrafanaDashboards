@@ -20,8 +20,21 @@ def main(output):
     report = {'status': 'checking'}
     prefix = 'sinapse-' + uuid.uuid4().hex[:10]
     db, migration, app, grafana, tests = [prefix + x for x in ('-db', '-migrate', '-app', '-grafana', '-tests')]
-    environment = dict(os.environ, DATABASE_PASS='ci-test-password', ENCRYPTION_KEY='ci-test-encryption-key',
-                       GRAFANA_ADMIN_PASSWORD='ci-test-password')
+    environment = dict(
+        os.environ,
+        DATABASE_USER='teslamate',
+        DATABASE_PASS='ci-test-password',
+        DATABASE_NAME='teslamate',
+        ENCRYPTION_KEY='ci-test-encryption-key',
+        GRAFANA_ADMIN_USER='admin',
+        GRAFANA_ADMIN_PASSWORD='ci-test-password',
+        FQDN_TM='teslamate.example.invalid',
+        TM_TZ='UTC',
+        LETSENCRYPT_EMAIL='ci@example.invalid',
+        BASIC_AUTH_USER='admin',
+        BASIC_AUTH_PASSWORD='ci-test-password',
+        MQTT_PORT='1883',
+    )
 
     def command(*argv, label=None, check=True, timeout=900):
         result = subprocess.run([str(a) for a in argv], cwd=ROOT, env=environment,
@@ -46,17 +59,40 @@ def main(output):
     def retry(fn, seconds=120):
         error = None
         for _ in range(seconds // 2):
-            try: return fn()
-            except Exception as exc: error = exc; time.sleep(2)
+            try:
+                return fn()
+            except Exception as exc:
+                error = exc
+                time.sleep(2)
         raise RuntimeError('Service did not become ready: ' + str(error))
 
     try:
-        model = json.loads(command('docker', 'compose', '-f', 'compose.yml', 'config', '--format', 'json', label='compose').stdout)
+        model = json.loads(command('docker', 'compose', '-f', 'compose.yml', 'config', '--format', 'json',
+                                   label='compose').stdout)
         database = model['services']['database']
+        proxy = model['services']['proxy']
+        teslamate = model['services']['teslamate']
+        grafana_service = model['services']['grafana']
+        auth = model['services']['basic-auth']
+
         assert any(v['target'] == '/var/lib/postgresql' for v in database['volumes'])
-        assert model['services']['teslamate']['build']['context'] == str(ROOT)
-        assert model['services']['grafana']['build']['dockerfile'] == 'grafana/Dockerfile'
-        report['compose'] = 'validated integrated builds and PostgreSQL 18 volume layout'
+        assert teslamate['build']['context'] == str(ROOT)
+        assert grafana_service['build']['dockerfile'] == 'grafana/Dockerfile'
+        assert proxy['image'].startswith('traefik:v3.6')
+        assert auth['image'].startswith('httpd:2.4')
+        assert not teslamate.get('ports'), 'TeslaMate must only be exposed through Traefik'
+        assert not grafana_service.get('ports'), 'Grafana must only be exposed through Traefik'
+        assert teslamate['environment']['CHECK_ORIGIN'] == 'true'
+        assert teslamate['environment']['VIRTUAL_HOST'] == environment['FQDN_TM']
+        assert grafana_service['environment']['GF_SERVER_ROOT_URL'] == 'https://%(domain)s/grafana'
+        assert grafana_service['environment']['GF_SERVER_SERVE_FROM_SUB_PATH'] == 'true'
+        assert teslamate['labels']['traefik.http.middlewares.teslamate-auth.basicauth.usersfile'] == '/auth/.htpasswd'
+        assert grafana_service['labels']['traefik.http.routers.grafana.tls.certresolver'] == 'tmhttpchallenge'
+        report['compose'] = (
+            'validated all-in-one Traefik HTTPS, generated Basic Auth, integrated builds '
+            'and PostgreSQL 18 volume layout'
+        )
+
         command('docker', 'compose', '-f', 'compose.yml', 'build', label='build', timeout=2700)
         report['builds'] = 'TeslaMate and Grafana built from this patched source tree'
         command('docker', 'network', 'create', prefix)
@@ -98,14 +134,17 @@ def main(output):
         for folder in [output / 'official', output / 'custom/dashboards']:
             for path in folder.rglob('*.json'):
                 data = json.loads(path.read_text())
-                if data['uid'] in expected: raise ValueError('Duplicate localized UID')
+                if data['uid'] in expected:
+                    raise ValueError('Duplicate localized UID')
                 expected[data['uid']] = data['title']
+
         def provisioned():
             health = json.loads(get(base + '/api/health'))
             found = {d['uid']: d['title'] for d in json.loads(get(base + '/api/search?type=dash-db&limit=5000', True))}
             assert health['database'] == 'ok'
             assert all(found.get(uid) == title for uid, title in expected.items()), 'Dashboard provisioning incomplete'
             return health
+
         health = retry(provisioned)
         ds = json.loads(get(base + '/api/datasources/uid/TeslaMate/health', True))
         assert ds['status'] == 'OK', ds
