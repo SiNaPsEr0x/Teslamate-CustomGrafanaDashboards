@@ -62,14 +62,21 @@ RUN python /src/i18n/generate.py \
     --translations /src/i18n \
     --output /out
 
-# The Ubuntu Grafana variant shares glibc with the TeslaMate release, allowing
-# both runtimes to live safely in one image while Compose still runs them as
-# independent services.
-FROM grafana/grafana:13.2.2-ubuntu
+# Use Grafana's Ubuntu build only as a source of the Grafana runtime. The final
+# image stays on Debian trixie, matching TeslaMate's glibc expectations while
+# still carrying Grafana in the same image.
+FROM grafana/grafana:13.2.2-ubuntu AS grafana-runtime
 
-USER root
+FROM debian:trixie-slim
 
-ENV GF_ANALYTICS_REPORTING_ENABLED=false \
+ENV PATH="/usr/share/grafana/bin:${PATH}" \
+    GF_PATHS_CONFIG="/etc/grafana/grafana.ini" \
+    GF_PATHS_DATA="/var/lib/grafana" \
+    GF_PATHS_HOME="/usr/share/grafana" \
+    GF_PATHS_LOGS="/var/log/grafana" \
+    GF_PATHS_PLUGINS="/var/lib/grafana/plugins" \
+    GF_PATHS_PROVISIONING="/etc/grafana/provisioning" \
+    GF_ANALYTICS_REPORTING_ENABLED=false \
     GF_ANALYTICS_CHECK_FOR_UPDATES=false \
     GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
     GF_ANALYTICS_FEEDBACK_LINKS_ENABLED=false \
@@ -97,17 +104,37 @@ ENV GF_ANALYTICS_REPORTING_ENABLED=false \
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         libodbc2 \
         libsctp1 \
         libssl3t64 \
         libstdc++6 \
+        musl \
         tini \
         tzdata \
     && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 472 --gid 0 --create-home grafana \
     && groupadd --gid 10001 --system nonroot \
     && useradd --uid 10000 --system --gid nonroot --home-dir /opt/app --shell /usr/sbin/nologin nonroot \
-    && mkdir -p /opt/app/.srtm_cache \
-    && chown -R nonroot:nonroot /opt/app
+    && mkdir -p \
+        /opt/app/.srtm_cache \
+        /var/lib/grafana/plugins \
+        /var/log/grafana \
+        /etc/grafana/provisioning/datasources \
+        /etc/grafana/provisioning/dashboards \
+        /etc/grafana/provisioning/notifiers \
+        /etc/grafana/provisioning/plugins \
+        /etc/grafana/provisioning/access-control \
+        /etc/grafana/provisioning/alerting \
+    && chown -R 10000:10001 /opt/app \
+    && chown -R 472:0 /var/lib/grafana /var/log/grafana /etc/grafana/provisioning \
+    && chmod -R 775 /var/lib/grafana /var/log/grafana /etc/grafana/provisioning
+
+COPY --from=grafana-runtime /usr/share/grafana /usr/share/grafana
+COPY --from=grafana-runtime /etc/grafana /etc/grafana
+COPY --from=grafana-runtime --chmod=555 /run.sh /run.sh
+COPY --from=grafana-runtime /.grafana-version /.grafana-version
 
 COPY --from=teslamate-builder --chown=10000:10001 /opt/built /opt/app
 COPY --chown=10000:10001 --chmod=555 entrypoint.sh /teslamate-entrypoint.sh
@@ -133,7 +160,7 @@ COPY config/grafana/datasource.yml /etc/grafana/provisioning/datasources/datasou
 COPY custom/LICENSE /usr/share/doc/teslamate-custom/LICENSE
 
 RUN chown -R 472:0 /var/lib/grafana /var/log/grafana /etc/grafana/provisioning \
-    && chmod -R u+rwX,g+rwX /var/lib/grafana /var/log/grafana
+    && chmod -R u+rwX,g+rwX /var/lib/grafana /var/log/grafana /etc/grafana/provisioning
 
 EXPOSE 3000 4000
 
