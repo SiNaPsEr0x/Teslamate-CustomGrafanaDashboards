@@ -10,7 +10,7 @@ permissions:
   issues: write
 concurrency:
   group: italian-localization-upstream-sync
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   distribution:
     if: github.repository == 'SiNaPsEr0x/Teslamate-CustomGrafanaDashboards' && (github.event_name != 'push' || github.event.head_commit.author.name != 'github-actions[bot]')
@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/manage.py --runtime --publish --output "${{ runner.temp }}/unified-output"
       - name: Upload Italian dashboards and validation evidence
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: sinapse-teslamate-${{ github.run_id }}
