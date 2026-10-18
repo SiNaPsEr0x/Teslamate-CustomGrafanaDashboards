@@ -78,8 +78,8 @@ def main(output):
         auth = model['services']['basic-auth']
 
         assert any(v['target'] == '/var/lib/postgresql' for v in database['volumes'])
-        assert teslamate['build']['context'] == str(ROOT)
-        assert grafana_service['build']['dockerfile'] == 'grafana/Dockerfile'
+        assert teslamate['image'] == 'ghcr.io/sinapser0x/teslamate:latest'
+        assert grafana_service['image'] == 'ghcr.io/sinapser0x/teslamate-grafana:latest'
         assert proxy['image'].startswith('traefik:v3.6')
         assert auth['image'].startswith('httpd:2.4')
         assert not teslamate.get('ports'), 'TeslaMate must only be exposed through Traefik'
@@ -96,10 +96,11 @@ def main(output):
         assert grafana_service['labels']['traefik.http.routers.grafana.tls.certresolver'] == 'tmhttpchallenge'
         report['compose'] = (
             'validated all-in-one Traefik HTTPS, configurable host ports, generated Basic Auth, '
-            'integrated builds and PostgreSQL 18 volume layout'
+            'prebuilt GHCR images and PostgreSQL 18 volume layout'
         )
 
-        command('docker', 'compose', '-f', 'compose.yml', 'build', label='build', timeout=2700)
+        command('docker', 'build', '-t', teslamate['image'], '-f', 'Dockerfile', '.', label='build-teslamate', timeout=2700)
+        command('docker', 'build', '-t', grafana_service['image'], '-f', 'grafana/Dockerfile', '.', label='build-grafana', timeout=2700)
         report['builds'] = 'TeslaMate and Grafana built from this patched source tree'
         command('docker', 'network', 'create', prefix)
         command('docker', 'run', '-d', '--name', db, '--network', prefix, '--network-alias', 'database',
