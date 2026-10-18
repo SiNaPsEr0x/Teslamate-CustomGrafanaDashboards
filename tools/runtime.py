@@ -68,7 +68,8 @@ def main(output):
         env = ['-e', 'DATABASE_USER=teslamate', '-e', 'DATABASE_PASS=ci-test-password', '-e', 'DATABASE_NAME=teslamate',
                '-e', 'DATABASE_HOST=database', '-e', 'ENCRYPTION_KEY=ci-test-encryption-key', '-e', 'DISABLE_MQTT=true']
         # Run all available Elixir tests, including the exact Italian plural regression.
-        command('docker', 'run', '--name', tests, '--network', prefix, *env,
+        command('docker', 'run', '--name', tests, '--network', prefix, '--user', f'{os.getuid()}:{os.getgid()}',
+                '-e', 'HOME=/tmp', '-e', 'HEX_HOME=/tmp/.hex', '-e', 'MIX_HOME=/tmp/.mix', *env,
                 '-e', 'DATABASE_NAME=teslamate_test', '-e', 'MIX_ENV=test', '-e', 'ELIXIR_ASSERT_TIMEOUT=1000',
                 '--mount', f'type=bind,source={ROOT},target=/repo', '-w', '/repo/elixir',
                 'elixir:1.20.3-otp-29', 'bash', '-euc',

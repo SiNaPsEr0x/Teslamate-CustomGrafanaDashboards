@@ -87,8 +87,21 @@ def merge_release(root, old, new, prefix=None):
     result = run('git', *args, new, cwd=root, check=False)
     if result.returncode:
         conflicts = git(root, 'diff', '--name-only', '--diff-filter=U')
-        git(root, 'merge', '--abort')
-        raise RuntimeError('Merge conflict, candidate not published:\n' + conflicts + '\n' + result.stderr)
+        paths = conflicts.splitlines()
+        controlled = lambda p: p in {'README.md', '.github/pull.yml'} or p.startswith('.github/workflows/')
+        if not prefix and paths and all(controlled(p) for p in paths):
+            # Distribution documentation and workflow policy deliberately supersede
+            # their upstream counterparts; source-code conflicts still stop the sync.
+            for path in paths:
+                if path.startswith('.github/workflows/') and path != WORKFLOW:
+                    git(root, 'rm', '-f', '--', path)
+                else:
+                    git(root, 'checkout', '--ours', '--', path)
+                    git(root, 'add', path)
+            git(root, 'commit', '--no-edit')
+        else:
+            git(root, 'merge', '--abort')
+            raise RuntimeError('Merge conflict, candidate not published:\n' + conflicts + '\n' + result.stderr)
     return True
 
 
@@ -260,6 +273,8 @@ def main(args):
                     if changed:
                         (output / (name + '-upstream.diff')).write_text(git(root, 'diff', old['commit'], latest[name]['commit']))
                     merge_release(work, old['commit'], latest[name]['commit'], 'custom' if name == 'customs' else None)
+                    if changed and name == 'teslamate':
+                        (work / 'docs/TESLAMATE-UPSTREAM.md').write_text(git(root, 'show', latest[name]['commit'] + ':README.md') + '\n')
                 stage = 'preserve and validate Italian localization'
                 normalize(work)
                 preserve_translations(before_translations, translation_snapshot(work))

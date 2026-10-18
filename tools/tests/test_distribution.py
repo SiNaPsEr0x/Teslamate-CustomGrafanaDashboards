@@ -71,6 +71,32 @@ class SubtreeTests(unittest.TestCase):
             self.assertFalse((root / 'chart.txt').exists())
             self.assertTrue(manage.ancestor(root, merged, 'HEAD'))
 
+    def test_official_readme_conflict_preserves_distribution_and_updates_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git(root, 'init', '-b', 'upstream')
+            git(root, 'config', 'user.name', 'Test')
+            git(root, 'config', 'user.email', 'test@example.invalid')
+            (root / 'README.md').write_text('upstream original')
+            (root / 'app.txt').write_text('v1')
+            git(root, 'add', '.')
+            git(root, 'commit', '-m', 'release 1')
+            old = git(root, 'rev-parse', 'HEAD')
+            git(root, 'checkout', '-b', 'main')
+            (root / 'README.md').write_text('Italian distribution')
+            git(root, 'add', '.')
+            git(root, 'commit', '-m', 'own docs')
+            git(root, 'checkout', 'upstream')
+            (root / 'README.md').write_text('upstream release 2')
+            (root / 'app.txt').write_text('v2')
+            git(root, 'add', '.')
+            git(root, 'commit', '-m', 'release 2')
+            new = git(root, 'rev-parse', 'HEAD')
+            git(root, 'checkout', 'main')
+            self.assertTrue(manage.merge_release(root, old, new))
+            self.assertEqual((root / 'README.md').read_text(), 'Italian distribution')
+            self.assertEqual((root / 'app.txt').read_text(), 'v2')
+
     def test_concurrent_main_update_blocks_push(self):
         with patch.object(manage, 'git', return_value='new-sha\trefs/heads/main'):
             with self.assertRaisesRegex(RuntimeError, 'Concurrent main update'):
