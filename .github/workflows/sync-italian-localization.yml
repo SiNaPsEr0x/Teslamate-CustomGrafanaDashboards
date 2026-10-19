@@ -94,3 +94,93 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards
             org.opencontainers.image.description=TeslaMate italiano + Grafana Custom Dashboards in one Compose-ready image
+
+  verify-standalone-compose:
+    name: Verify public single-YAML Docker Compose deployment
+    needs: publish-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Configure Git defaults
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout published compose
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Validate compose without environment file
+        shell: bash
+        run: |
+          rm -f .env
+          docker compose -f compose.yml config >/dev/null
+
+      - name: Deploy exactly like a new user without registry login
+        shell: bash
+        run: |
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          for attempt in 1 2 3 4 5; do
+            if docker compose -f compose.yml up -d --pull always; then
+              exit 0
+            fi
+            echo "Registry image not ready yet; retry $attempt/5"
+            sleep 10
+          done
+          exit 1
+
+      - name: Verify generated credentials, TeslaMate, Grafana and datasource
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BOOTSTRAP_LOGS="$(docker compose -f compose.yml logs --no-color bootstrap)"
+          TM_PASSWORD="$(printf '%s\n' "$BOOTSTRAP_LOGS" | sed -n 's/.*TeslaMate  -> user: teslamate  password: //p' | tail -n 1)"
+          GF_PASSWORD="$(printf '%s\n' "$BOOTSTRAP_LOGS" | sed -n 's/.*Grafana    -> user: admin      password: //p' | tail -n 1)"
+          test -n "$TM_PASSWORD"
+          test -n "$GF_PASSWORD"
+
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl -fsS -u "teslamate:$TM_PASSWORD" http://127.0.0.1:4000/ | grep -q TeslaMate; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+          status="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/)"
+          test "$status" = "401"
+
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/api/health | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["database"] == "ok"'; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+          curl -fsS -u "admin:$GF_PASSWORD" http://127.0.0.1:3000/api/user \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["login"] == "admin"'
+          curl -fsS -u "admin:$GF_PASSWORD" http://127.0.0.1:3000/api/datasources/uid/TeslaMate/health \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"] == "OK"'
+          curl -fsS -u "admin:$GF_PASSWORD" 'http://127.0.0.1:3000/api/search?type=dash-db&limit=5000' \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d) > 0'
+
+          REPEAT="$(docker compose -f compose.yml run --rm --no-deps bootstrap)"
+          printf '%s\n' "$REPEAT" | grep -Fq "$TM_PASSWORD"
+          printf '%s\n' "$REPEAT" | grep -Fq "$GF_PASSWORD"
+
+      - name: Show diagnostics on failure
+        if: failure()
+        run: |
+          docker compose -f compose.yml ps -a || true
+          docker compose -f compose.yml logs --no-color --tail=300 || true
+
+      - name: Clean verification stack
+        if: always()
+        run: docker compose -f compose.yml down -v --remove-orphans || true
