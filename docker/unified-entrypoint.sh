@@ -3,17 +3,19 @@ set -eu
 
 SECRETS_DIR="${SINAPSE_SECRETS_DIR:-/run/sinapse}"
 
-if [ -z "${DATABASE_PASS:-}" ] && [ -r "$SECRETS_DIR/database_pass" ]; then
+# A mounted standalone Compose secret is authoritative. Direct docker users can
+# still provide the traditional environment variables when no secret file exists.
+if [ -r "$SECRETS_DIR/database_pass" ]; then
   DATABASE_PASS="$(cat "$SECRETS_DIR/database_pass")"
   export DATABASE_PASS
 fi
 
-if [ -z "${ENCRYPTION_KEY:-}" ] && [ -r "$SECRETS_DIR/encryption_key" ]; then
+if [ -r "$SECRETS_DIR/encryption_key" ]; then
   ENCRYPTION_KEY="$(cat "$SECRETS_DIR/encryption_key")"
   export ENCRYPTION_KEY
 fi
 
-if [ -z "${GF_SECURITY_ADMIN_PASSWORD:-}" ] && [ -r "$SECRETS_DIR/grafana_admin_password" ]; then
+if [ -r "$SECRETS_DIR/grafana_admin_password" ]; then
   GF_SECURITY_ADMIN_PASSWORD="$(cat "$SECRETS_DIR/grafana_admin_password")"
   export GF_SECURITY_ADMIN_PASSWORD
 fi
