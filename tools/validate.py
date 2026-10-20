@@ -71,6 +71,7 @@ def main(output):
     candidates = set()
     source = ROOT / 'grafana/dashboards'
     paths = sorted(source.rglob('*.json'))
+    generated_paths = []
     for path in paths:
         data = json.loads(path.read_text())
         key = path.relative_to(source).with_suffix('').as_posix()
@@ -79,19 +80,22 @@ def main(output):
         validator.collect_visible(data, local)
         local.discard(data.get('title'))
         candidates |= local
+        if key != 'internal/home':
+            generated_paths.append(path)
     missing = candidates - set(pack['strings']) - set(pack.get('passthrough', []))
     if missing:
         raise ValueError('Missing official Italian strings: ' + repr(sorted(missing)))
     subprocess.run([sys.executable, 'grafana/i18n/generate.py', '--source', str(source),
                     '--translations', str(ROOT / 'grafana/i18n'), '--output', str(output / 'official')], cwd=ROOT, check=True)
-    for path in paths:
+    assert not (output / 'official/internal/home.it.json').exists(), 'Localized Home must not be generated'
+    for path in generated_paths:
         data = json.loads(path.read_text())
         relative = path.relative_to(source).with_suffix('').as_posix()
         result = json.loads((output / 'official' / (relative + '.it.json')).read_text())
         assert list(raw_sql(data)) == list(raw_sql(result)), 'SQL changed in ' + relative
         assert result['uid'] == data['uid'] + '-it'
         assert result['title'] == pack['dashboard_titles'][relative]
-    info = {'gettext_entries': count, 'official_dashboards': len(paths),
+    info = {'gettext_entries': count, 'official_dashboards': len(generated_paths),
             'custom_dashboards': len(list((output / 'custom/dashboards').glob('*.json'))),
             'custom_navigation_patched': patched_navigation,
             'official_sql': 'unchanged', 'workflows': 1}
