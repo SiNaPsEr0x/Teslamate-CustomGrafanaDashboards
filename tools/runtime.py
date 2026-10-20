@@ -205,7 +205,10 @@ def main(output):
                 )
             }
             assert health['database'] == 'ok'
-            assert all(found.get(uid) == title for uid, title in expected.items()), 'Dashboard provisioning incomplete'
+            missing = {uid: title for uid, title in expected.items() if found.get(uid) != title}
+            assert not missing, ('Dashboard provisioning incomplete: missing/mismatched='
+                                 + json.dumps(missing, ensure_ascii=False)
+                                 + '; provisioned=' + json.dumps(found, ensure_ascii=False))
             return health
 
         health = retry(provisioned)
