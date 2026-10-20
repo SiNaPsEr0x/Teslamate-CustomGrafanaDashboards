@@ -1,0 +1,274 @@
+name: TeslaMate dashboards i18n
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "dashboards/**"
+      - "i18n/**"
+      - "scripts/validate_dashboards.py"
+      - "scripts/test_i18n.py"
+      - "scripts/localize.sh"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "dashboards/**"
+      - "i18n/**"
+      - "scripts/validate_dashboards.py"
+      - "scripts/test_i18n.py"
+      - "scripts/localize.sh"
+      - ".github/workflows/**"
+  schedule:
+    - cron: "17 6 * * *"
+      timezone: "Europe/Rome"
+  workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: "Check jheredianet/main and prepare an upstream sync PR"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "teslamate-i18n-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate dashboards and locales
+    if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.sync_upstream != true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Compile localization tools
+        run: python3 -m py_compile i18n/*.py scripts/test_i18n.py
+
+      - name: Validate canonical dashboards
+        run: python3 scripts/validate_dashboards.py --no-sql
+
+      - name: Test localization engine
+        run: python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
+
+      - name: Validate locale catalogs
+        run: |
+          python3 i18n/update_catalog.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --manifest i18n/locales.json \
+            --check \
+            --enforce-maturity \
+            --allow-legacy
+
+      - name: Generate every locale
+        run: |
+          rm -rf .localized-ci
+          python3 i18n/generate.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
+
+      - name: Validate generated dashboards
+        run: |
+          python3 i18n/validate_generated.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
+
+  upstream-sync:
+    name: Check upstream and prepare sync PR
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sync_upstream == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      UPSTREAM_REPOSITORY: jheredianet/Teslamate-CustomGrafanaDashboards
+      SYNC_BRANCH: automation/upstream-dashboard-sync
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Fetch upstream and import canonical dashboards
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git" 2>/dev/null || \
+            git remote set-url upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch --no-tags --prune upstream main
+
+          upstream_sha="$(git rev-parse upstream/main)"
+          echo "sha=${upstream_sha}" >> "$GITHUB_OUTPUT"
+
+          git switch -C "$SYNC_BRANCH"
+          rm -rf dashboards
+          git checkout upstream/main -- dashboards
+          git add -A dashboards
+
+          if git diff --cached --quiet -- dashboards; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No upstream dashboard changes."
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Upstream dashboard changes detected at ${upstream_sha}."
+
+      - name: Refresh translation catalogs
+        id: catalogs
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          python3 i18n/update_catalog.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --manifest i18n/locales.json \
+            --write
+
+      - name: Compile localization tools
+        id: compile
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: python3 -m py_compile i18n/*.py scripts/test_i18n.py
+
+      - name: Validate upstream dashboards
+        id: canonical
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: python3 scripts/validate_dashboards.py --no-sql
+
+      - name: Run localization regression tests
+        id: tests
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
+
+      - name: Check translation maturity
+        id: maturity
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          python3 i18n/update_catalog.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --manifest i18n/locales.json \
+            --check \
+            --enforce-maturity
+
+      - name: Generate every locale
+        id: generate
+        if: steps.upstream.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          rm -rf .localized-ci
+          python3 i18n/generate.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
+
+      - name: Validate generated dashboards
+        id: generated
+        if: steps.upstream.outputs.changed == 'true' && steps.generate.outcome == 'success'
+        continue-on-error: true
+        run: |
+          python3 i18n/validate_generated.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
+
+      - name: Commit and push sync branch
+        if: steps.upstream.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A dashboards i18n/locales
+          git commit -m "chore: sync upstream dashboards ${{ steps.upstream.outputs.sha }}"
+          git fetch origin "refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}" || true
+          git push --force-with-lease origin "HEAD:refs/heads/${SYNC_BRANCH}"
+
+      - name: Open or update upstream sync PR
+        if: steps.upstream.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${{ steps.upstream.outputs.sha }}"
+          short_sha="${short_sha:0:12}"
+
+          cat > /tmp/upstream-pr.md <<EOF
+          Automated dashboard sync from \`${UPSTREAM_REPOSITORY}@${{ steps.upstream.outputs.sha }}\`.
+
+          The English files under \`dashboards/\` were imported from upstream and every locale catalog was refreshed against the new source.
+
+          | Check | Result |
+          | --- | --- |
+          | Catalog refresh | \`${{ steps.catalogs.outcome }}\` |
+          | Python compile | \`${{ steps.compile.outcome }}\` |
+          | Canonical dashboard validation | \`${{ steps.canonical.outcome }}\` |
+          | i18n regression tests | \`${{ steps.tests.outcome }}\` |
+          | Complete-locale coverage | \`${{ steps.maturity.outcome }}\` |
+          | Locale generation | \`${{ steps.generate.outcome }}\` |
+          | Generated dashboard validation | \`${{ steps.generated.outcome }}\` |
+
+          If complete-locale coverage fails, upstream introduced or changed user-visible text that still needs translation/review in a locale marked \`complete\` (currently Italian). Preview locales may fall back to English.
+
+          This PR is intentionally **not auto-merged**.
+          EOF
+
+          pr_number="$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" \
+              --title "chore: sync upstream dashboards (${short_sha})" \
+              --body-file /tmp/upstream-pr.md
+          else
+            gh pr create \
+              --base main \
+              --head "$SYNC_BRANCH" \
+              --title "chore: sync upstream dashboards (${short_sha})" \
+              --body-file /tmp/upstream-pr.md
+          fi
+
+      - name: Fail when upstream sync needs attention
+        if: always() && steps.upstream.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          for result in \
+            "${{ steps.catalogs.outcome }}" \
+            "${{ steps.compile.outcome }}" \
+            "${{ steps.canonical.outcome }}" \
+            "${{ steps.tests.outcome }}" \
+            "${{ steps.maturity.outcome }}" \
+            "${{ steps.generate.outcome }}" \
+            "${{ steps.generated.outcome }}"; do
+            if [ "$result" != "success" ]; then
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::Upstream changes were captured, but one or more validation gates need attention."
+            exit 1
+          fi
