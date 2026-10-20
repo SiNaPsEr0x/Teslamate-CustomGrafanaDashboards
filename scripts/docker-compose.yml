@@ -1,7 +1,10 @@
-# This is the official docker-compose.yml sample from Teslamate
-# https://docs.teslamate.org/docs/installation/docker
-
-# Take a look on line 48 in order to add two lines to get the auto-import feature from this repo to Grafana
+# TeslaMate Docker Compose sample with localized Custom Grafana Dashboards.
+#
+# Prepare the selected locale first:
+#   TESLAMATE_CUSTOM_LOCALE=it ./scripts/localize.sh
+#
+# The default locale is Italian. Set TESLAMATE_CUSTOM_LOCALE to any locale
+# present under i18n/locales before running docker compose.
 
 services:
   teslamate:
@@ -43,18 +46,13 @@ services:
       - 3000:3000
     volumes:
       - teslamate-grafana-data:/var/lib/grafana
-      # These are the two lines you need to add. 
-      # To keep it easy, you leave a it is with your home path (~/) or modify it accordingly
-      - ~/Teslamate-CustomGrafanaDashboards/customdashboards.yml:/etc/grafana/provisioning/dashboards/customdashboards.yml
-      - ~/Teslamate-CustomGrafanaDashboards/dashboards:/TeslamateCustomDashboards
-
+      - ${HOME}/Teslamate-CustomGrafanaDashboards/customdashboards.yml:/etc/grafana/provisioning/dashboards/customdashboards.yml:ro
+      - ${HOME}/Teslamate-CustomGrafanaDashboards/.localized/${TESLAMATE_CUSTOM_LOCALE:-it}:/TeslamateCustomDashboards:ro
 
   mosquitto:
     image: eclipse-mosquitto:2
     restart: always
     command: mosquitto -c /mosquitto-no-auth.conf
-    # ports:
-    #   - 1883:1883
     volumes:
       - mosquitto-conf:/mosquitto/config
       - mosquitto-data:/mosquitto/data

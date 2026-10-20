@@ -101,3 +101,6 @@ ipch/
 __pycache__/
 *.py[cod]
 HANDOFF-agente.md
+
+# Generated localized dashboards
+.localized/
