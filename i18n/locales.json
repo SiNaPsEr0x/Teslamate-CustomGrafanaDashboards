@@ -1,0 +1,22 @@
+{
+  "default": "it",
+  "fallback": "en",
+  "locales": {
+    "it": {
+      "name": "Italiano",
+      "maturity": "complete"
+    },
+    "de": {
+      "name": "Deutsch",
+      "maturity": "preview"
+    },
+    "fr": {
+      "name": "Français",
+      "maturity": "preview"
+    },
+    "es": {
+      "name": "Español",
+      "maturity": "preview"
+    }
+  }
+}

@@ -8,6 +8,7 @@ on:
       - "i18n/**"
       - "scripts/validate_dashboards.py"
       - "scripts/test_i18n.py"
+      - "scripts/localize.sh"
       - ".github/workflows/validate-dashboards.yml"
   pull_request:
     branches: [main, develop]
@@ -16,6 +17,7 @@ on:
       - "i18n/**"
       - "scripts/validate_dashboards.py"
       - "scripts/test_i18n.py"
+      - "scripts/localize.sh"
       - ".github/workflows/validate-dashboards.yml"
   workflow_dispatch:
 
@@ -32,17 +34,36 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate dashboards
+      - name: Compile localization tools
+        run: python3 -m py_compile i18n/*.py scripts/test_i18n.py
+
+      - name: Validate canonical dashboards
         run: python3 scripts/validate_dashboards.py --no-sql
 
       - name: Test localization engine
         run: python3 -m unittest discover -s scripts -p 'test_i18n.py' -v
 
-      - name: Validate locale coverage
+      - name: Validate locale catalogs
         run: |
           python3 i18n/update_catalog.py \
             --source dashboards \
             --translations i18n/locales \
+            --manifest i18n/locales.json \
             --check \
-            --strict \
+            --enforce-maturity \
             --allow-legacy
+
+      - name: Generate every locale
+        run: |
+          rm -rf .localized-ci
+          python3 i18n/generate.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
+
+      - name: Validate generated dashboards
+        run: |
+          python3 i18n/validate_generated.py \
+            --source dashboards \
+            --translations i18n/locales \
+            --output .localized-ci
