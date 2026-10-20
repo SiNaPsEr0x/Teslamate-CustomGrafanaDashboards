@@ -193,6 +193,10 @@ def main(output):
         for folder in [output / 'official', output / 'custom/dashboards']:
             for path in folder.rglob('*.json'):
                 data = json.loads(path.read_text())
+                # Home.it is intentionally omitted from the runtime image:
+                # Grafana rejects two dashboards named Home in Internal.
+                if data.get('uid') == 'be2m9kga7b8qoc-it':
+                    continue
                 if data['uid'] in expected:
                     raise ValueError('Duplicate localized UID')
                 expected[data['uid']] = data['title']
