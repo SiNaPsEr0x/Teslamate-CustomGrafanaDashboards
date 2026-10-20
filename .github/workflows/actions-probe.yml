@@ -1,0 +1,14 @@
+name: Actions probe
+
+on:
+  push:
+    paths:
+      - ".github/workflows/actions-probe.yml"
+
+permissions: read-all
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "GitHub Actions is enabled"
