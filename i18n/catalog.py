@@ -125,7 +125,11 @@ def list_segment(container_key: str, item: object, index: int) -> str:
             return f"variable[{token(item['name'])}]"
         for discriminator in ("refId", "uid", "name", "id"):
             if item.get(discriminator) not in (None, ""):
-                return f"{container_key}[{discriminator}={token(item[discriminator])}]"
+                # Generic Grafana arrays can legitimately contain repeated IDs
+                # (for example multiple calculateField transformations). Keep
+                # the semantic discriminator for readability but include the
+                # array index so contextual keys always remain unique.
+                return f"{container_key}[{index}:{discriminator}={token(item[discriminator])}]"
     return f"{container_key}[{index}]"
 
 
