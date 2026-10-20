@@ -29,5 +29,37 @@ The installer/updater can also do the clone, update and generation in one step:
 TESLAMATE_CUSTOM_LOCALE=it ./scripts/clonerepo.sh
 ```
 
+## Automatic upstream monitoring
+
+The repository uses the same GitHub Actions workflow for normal validation and
+for upstream monitoring. Every day at **06:17 Europe/Rome** it checks
+`jheredianet/Teslamate-CustomGrafanaDashboards` `main`.
+
+When the upstream `dashboards/` directory changes, the workflow:
+
+1. imports only the canonical English dashboard files;
+2. refreshes every translation catalog against the new source;
+3. compiles and tests the localization engine;
+4. validates the upstream dashboard JSON;
+5. checks locale maturity, requiring complete locales such as Italian to stay
+   at full coverage;
+6. generates every bundled locale and verifies that SQL, datasource references,
+   UIDs, links and generated files remain safe;
+7. updates the fixed branch `automation/upstream-dashboard-sync` and opens or
+   updates one pull request against `main`.
+
+The automated pull request is **never auto-merged**. If upstream introduces new
+or changed visible text, the PR remains available with those catalog changes and
+the workflow fails its final gate until the complete locale has been translated
+or reviewed. Preview locales are allowed to fall back to English.
+
+A manual run is also available from **Actions → Validate and sync dashboards →
+Run workflow** by enabling the `sync_upstream` input.
+
+The sync job needs GitHub Actions to be enabled for this fork and needs the
+repository workflow token to be allowed `contents: write` and
+`pull-requests: write`. The workflow itself requests only those write
+permissions for the sync job; normal validation remains read-only.
+
 See [`i18n/README.md`](i18n/README.md) for catalog format, validation rules and
 how to add another language.
