@@ -142,8 +142,8 @@ jobs:
           test -n "$GF_PASSWORD"
 
           ready=0
-          for _ in $(seq 1 90); do
-            if curl -fsS -u "teslamate:$TM_PASSWORD" http://127.0.0.1:4000/ | grep -q TeslaMate; then
+          for _ in $(seq 1 120); do
+            if [ "$(curl -sS -o /dev/null -w '%{http_code}' -u "teslamate:$TM_PASSWORD" http://127.0.0.1:4000/)" = "200" ]; then
               ready=1
               break
             fi
