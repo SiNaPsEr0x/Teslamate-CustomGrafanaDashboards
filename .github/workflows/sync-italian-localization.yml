@@ -82,12 +82,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and publish unified TeslaMate + Grafana image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.unified
           push: true
+          cache-from: type=gha,scope=sinapse-unified
+          cache-to: type=gha,mode=max,scope=sinapse-unified
           tags: |
             ghcr.io/sinapser0x/teslamate:latest
             ghcr.io/sinapser0x/teslamate:sha-${{ steps.source.outputs.sha }}
