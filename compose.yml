@@ -2,18 +2,12 @@ name: sinapse-teslamate
 
 # Standalone deployment: this file is the only configuration artifact required.
 # On first start, the bootstrap service generates persistent random credentials in
-# the sinapse-secrets Docker volume. Existing installations may temporarily keep
-# their old environment values; when the volume is empty they are imported once.
+# the sinapse-secrets Docker volume. No .env file or external secret is required.
 
 services:
   bootstrap:
     image: alpine:3.22
     restart: "no"
-    environment:
-      DATABASE_PASS: ${DATABASE_PASS:-}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
-      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -22,21 +16,16 @@ services:
 
         write_secret() {
           name="$$1"
-          seed="$$2"
           file="/run/sinapse/$$name"
           if [ ! -s "$$file" ]; then
-            if [ -n "$$seed" ]; then
-              printf '%s' "$$seed" > "$$file"
-            else
-              head -c 48 /dev/urandom | base64 | tr -d '\n' > "$$file"
-            fi
+            head -c 48 /dev/urandom | base64 | tr -d '\n' > "$$file"
           fi
         }
 
-        write_secret database_pass "$$DATABASE_PASS"
-        write_secret encryption_key "$$ENCRYPTION_KEY"
-        write_secret basic_auth_password "$$BASIC_AUTH_PASSWORD"
-        write_secret grafana_admin_password "$$GRAFANA_ADMIN_PASSWORD"
+        write_secret database_pass
+        write_secret encryption_key
+        write_secret basic_auth_password
+        write_secret grafana_admin_password
         chmod 0444 /run/sinapse/*
 
         echo ""
