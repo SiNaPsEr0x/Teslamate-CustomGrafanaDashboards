@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from typing import Iterator
 
@@ -20,6 +20,8 @@ STATUS_VALUES = {"translated", "missing", "needs_review", "passthrough"}
 SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.:@/-]+")
 LOCALE_RE = re.compile(r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
 PLACEHOLDER_RE = re.compile(r"\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*")
+VARIABLE_ONLY_RE = re.compile(r"^\$(?:\{[A-Za-z_][A-Za-z0-9_:. -]*\}|[A-Za-z_][A-Za-z0-9_]*)$")
+NUMBER_VALUE_RE = re.compile(r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[A-Za-z%]+)?$")
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,48 @@ def list_segment(container_key: str, item: object, index: int) -> str:
     return f"{container_key}[{index}]"
 
 
+def is_intrinsic_passthrough(source: str) -> bool:
+    """Return True for values that carry no natural-language content."""
+    value = source.strip()
+    return (
+        value in {"-", "--"}
+        or bool(VARIABLE_ONLY_RE.fullmatch(value))
+        or bool(NUMBER_VALUE_RE.fullmatch(value))
+    )
+
+
+def inferred_dashboard_title(dashboard: str) -> str:
+    """Turn CurrentState / DCChargingCurvesByCarrier into their display form."""
+    name = PurePosixPath(dashboard).name
+    name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", name)
+    name = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", name)
+    return name
+
+
+def legacy_string_translation(pack: dict, source: str) -> str | None:
+    strings = pack.get("strings") or {}
+    translated = strings.get(source)
+    if isinstance(translated, str) and translated:
+        return translated
+    stripped = source.strip()
+    if stripped != source:
+        translated = strings.get(stripped)
+        if isinstance(translated, str) and translated:
+            return translated
+    return None
+
+
+def dashboard_title_translation(pack: dict, message: Message) -> str | None:
+    translated = (pack.get("dashboard_titles") or {}).get(message.dashboard)
+    if not isinstance(translated, str) or not translated:
+        return None
+    if message.key == f"dashboard.{message.dashboard}.title":
+        return translated
+    if message.key.endswith(".title") and message.source.strip() == inferred_dashboard_title(message.dashboard):
+        return translated
+    return None
+
+
 def iter_messages(value: object, context: str, dashboard: str) -> Iterator[Message]:
     if isinstance(value, list):
         for index, item in enumerate(value):
@@ -180,15 +224,16 @@ def extract_messages(source_dir: Path) -> dict[str, Message]:
 
 
 def seed_translation(message: Message, pack: dict) -> tuple[str, str]:
-    if message.source in set(pack.get("passthrough") or []):
+    if is_intrinsic_passthrough(message.source) or message.source in set(pack.get("passthrough") or []):
         return message.source, "passthrough"
-    if message.key == f"dashboard.{message.dashboard}.title":
-        translated = (pack.get("dashboard_titles") or {}).get(message.dashboard)
-        if isinstance(translated, str) and translated:
-            validate_placeholders(message.source, translated, message.key)
-            return translated, "translated"
-    translated = (pack.get("strings") or {}).get(message.source)
-    if isinstance(translated, str) and translated:
+
+    title = dashboard_title_translation(pack, message)
+    if title:
+        validate_placeholders(message.source, title, message.key)
+        return title, "translated"
+
+    translated = legacy_string_translation(pack, message.source)
+    if translated:
         validate_placeholders(message.source, translated, message.key)
         return translated, "translated"
     return "", "missing"
@@ -256,13 +301,14 @@ def resolve_translation(pack: dict, key: str, source: str, dashboard: str) -> st
         if status == "passthrough":
             return source
 
-    if key == f"dashboard.{dashboard}.title":
-        title = (pack.get("dashboard_titles") or {}).get(dashboard)
-        if isinstance(title, str) and title:
-            validate_placeholders(source, title, key)
-            return title
-    translated = (pack.get("strings") or {}).get(source)
-    if isinstance(translated, str) and translated:
+    synthetic = Message(key=key, source=source, dashboard=dashboard)
+    title = dashboard_title_translation(pack, synthetic)
+    if title:
+        validate_placeholders(source, title, key)
+        return title
+
+    translated = legacy_string_translation(pack, source)
+    if translated:
         validate_placeholders(source, translated, key)
         return translated
     return source
