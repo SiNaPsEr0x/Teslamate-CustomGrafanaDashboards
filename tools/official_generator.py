@@ -38,6 +38,11 @@ def main():
                    for p in paths}
         for path in paths:
             key = path.relative_to(source).with_suffix('').as_posix()
+            # Grafana provisions the built-in Home dashboard from the source file.
+            # A localized copy would have the same title in the same Internal folder
+            # and is rejected as a duplicate provisioning entry.
+            if key == 'internal/home':
+                continue
             original = json.loads(path.read_text())
             result = localizer.localize_dashboard(original, key, pack)
             result = links(result, uid_map)
@@ -46,7 +51,7 @@ def main():
             target = out / (key + '.' + locale + '.json')
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
-    print(f'Generated {len(paths)} official dashboards per language')
+    print(f'Generated localized official dashboards for {len(paths)} source dashboards per language')
 
 
 if __name__ == '__main__':
