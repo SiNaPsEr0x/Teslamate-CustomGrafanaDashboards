@@ -50,6 +50,20 @@ def same_catalog(pack: dict, synchronized: dict) -> bool:
     )
 
 
+def print_uncovered(locale: str, synchronized: dict) -> None:
+    """Print actionable context for missing/review entries in complete locales."""
+    pending = []
+    for key, entry in (synchronized.get("messages") or {}).items():
+        if entry.get("status") in {"missing", "needs_review"}:
+            pending.append((key, entry.get("status"), entry.get("source", "")))
+    if not pending:
+        return
+    print(f"{locale}: uncovered contextual messages:")
+    for key, status, source in pending:
+        printable = source.replace("\n", "\\n")
+        print(f"  - [{status}] {key} :: {printable}")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default="dashboards")
@@ -101,6 +115,8 @@ def main(argv=None) -> int:
             f"passthrough={stats['passthrough']}; missing={stats['missing']}; "
             f"review={stats['needs_review']}; obsolete={stats['obsolete']}"
         )
+        if requires_complete and (stats["missing"] or stats["needs_review"]):
+            print_uncovered(pack["locale"], synchronized)
 
     return 1 if failed else 0
 
