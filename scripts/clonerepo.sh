@@ -1,17 +1,17 @@
 #!/bin/bash
+set -euo pipefail
 
-# The following command will clone the source files from this repository. 
-# This should be run in an appropriate directory within which you would like to keep it.
-# To keep it easy, you may run this your home path (~/) or modify it accordingly
+REPO_URL="${TESLAMATE_CUSTOM_REPO:-https://github.com/SiNaPsEr0x/Teslamate-CustomGrafanaDashboards.git}"
+TARGET="${TESLAMATE_CUSTOM_DIR:-$HOME/Teslamate-CustomGrafanaDashboards}"
+LOCALE="${TESLAMATE_CUSTOM_LOCALE:-it}"
 
-# In case git is not installed
 sudo apt update
-sudo apt install git
+sudo apt install -y git python3
 
-# Clone the repository
-git clone https://github.com/jheredianet/Teslamate-CustomGrafanaDashboards.git
+if [ -d "$TARGET/.git" ]; then
+  git -C "$TARGET" pull --ff-only
+else
+  git clone "$REPO_URL" "$TARGET"
+fi
 
-
-# Update the repository
-# If you want to be sure that you are using the latest version of the Dashboards
-git -C ~/Teslamate-CustomGrafanaDashboards pull
+TESLAMATE_CUSTOM_LOCALE="$LOCALE" "$TARGET/scripts/localize.sh"
