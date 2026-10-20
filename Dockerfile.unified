@@ -69,7 +69,9 @@ FROM grafana/grafana:13.2.2-ubuntu AS grafana-runtime
 
 FROM debian:trixie-slim
 
-ENV PATH="/usr/share/grafana/bin:${PATH}" \
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PATH="/usr/share/grafana/bin:${PATH}" \
     GF_PATHS_CONFIG="/etc/grafana/grafana.ini" \
     GF_PATHS_DATA="/var/lib/grafana" \
     GF_PATHS_HOME="/usr/share/grafana" \
@@ -80,8 +82,6 @@ ENV PATH="/usr/share/grafana/bin:${PATH}" \
     GF_ANALYTICS_CHECK_FOR_UPDATES=false \
     GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
     GF_ANALYTICS_FEEDBACK_LINKS_ENABLED=false \
-    GF_AUTH_ANONYMOUS_ENABLED=false \
-    GF_AUTH_BASIC_ENABLED=false \
     GF_SECURITY_ADMIN_USER=admin \
     GF_SECURITY_ALLOW_EMBEDDING=true \
     GF_SECURITY_DISABLE_GRAVATAR=true \
@@ -153,7 +153,6 @@ COPY grafana/dashboards/*.json /dashboards/
 COPY --from=localized-dashboards /out/internal/*.json /dashboards_internal/
 COPY --from=localized-dashboards /out/reports/*.json /dashboards_reports/
 COPY --from=localized-dashboards /out/*.json /dashboards/
-RUN rm -f /dashboards_internal/home.it.json
 COPY --from=sinapse-custom /out/ /custom_dashboards/
 COPY config/grafana/custom.yml /etc/grafana/provisioning/dashboards/sinapse-custom.yml
 COPY config/grafana/datasource.yml /etc/grafana/provisioning/datasources/datasource.yml
