@@ -38,10 +38,6 @@ def main():
                    for p in paths}
         for path in paths:
             key = path.relative_to(source).with_suffix('').as_posix()
-            # The localized internal Home dashboard shares the original title
-            # and folder. Grafana rejects both as duplicate provisioning entries.
-            if key == 'internal/home':
-                continue
             original = json.loads(path.read_text())
             result = localizer.localize_dashboard(original, key, pack)
             result = links(result, uid_map)
