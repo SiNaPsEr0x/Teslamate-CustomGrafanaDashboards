@@ -51,6 +51,26 @@ class I18nTest(unittest.TestCase):
             self.assertNotIn("SELECT id FROM cars", sources)
             self.assertFalse(any("SELECT level" in source for source in sources))
 
+    def test_repeated_generic_ids_get_unique_context_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self._dashboard(Path(tmp))
+            path = source / "overview.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["panels"][0]["transformations"] = [
+                {"id": "calculateField", "options": {"alias": "avg_cost_kwh"}},
+                {"id": "calculateField", "options": {"alias": "avg_cost_km_temp"}},
+            ]
+            path.write_text(json.dumps(data), encoding="utf-8")
+            messages = catalog.extract_messages(source)
+            self.assertEqual(
+                messages["dashboard.overview.panel[7].transformations[0:id=calculateField].options.alias"].source,
+                "avg_cost_kwh",
+            )
+            self.assertEqual(
+                messages["dashboard.overview.panel[7].transformations[1:id=calculateField].options.alias"].source,
+                "avg_cost_km_temp",
+            )
+
     def test_legacy_pack_migrates_without_losing_translations(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = self._dashboard(Path(tmp))
