@@ -153,6 +153,7 @@ COPY grafana/dashboards/*.json /dashboards/
 COPY --from=localized-dashboards /out/internal/*.json /dashboards_internal/
 COPY --from=localized-dashboards /out/reports/*.json /dashboards_reports/
 COPY --from=localized-dashboards /out/*.json /dashboards/
+RUN rm -f /dashboards_internal/home.it.json
 COPY --from=sinapse-custom /out/ /custom_dashboards/
 COPY config/grafana/custom.yml /etc/grafana/provisioning/dashboards/sinapse-custom.yml
 COPY config/grafana/datasource.yml /etc/grafana/provisioning/datasources/datasource.yml
